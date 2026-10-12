@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}</style></head><body><title>Proof to Profit</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}</style></head><body><title>Proof to Profit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -144,6 +144,43 @@ section.s{padding-block:76px}
 
 footer{padding-block:40px 36px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
 footer a{text-decoration:none;font-weight:600;color:var(--text)}
+
+
+/* light demo */
+.ld{background:var(--surface);color:var(--text);font-family:var(--f-body);padding:20px 18px 16px;min-height:520px;display:flex;flex-direction:column;gap:16px}
+.ld[hidden]{display:none}
+.ld-pick-label{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.ld-picks{display:flex;gap:8px;flex-wrap:wrap}
+.ld-pick{font:inherit;font-size:14px;font-weight:600;padding:9px 15px;border-radius:999px;border:1.5px solid var(--rule);background:var(--bg);color:var(--text);cursor:pointer;text-align:left}
+.ld-pick small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+.ld-pick[aria-selected="true"]{border-color:var(--accent);background:var(--orange-soft)}
+.ld-pick:focus-visible,.ld-tab:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.ld-stage{flex:1;min-width:0}
+.ld-empty,.ld-load{display:grid;place-items:center;text-align:center;min-height:300px;color:var(--muted);font-size:15px;border:1.5px dashed var(--rule);border-radius:16px;padding:24px}
+.ld-spin{width:34px;height:34px;border-radius:50%;border:4px solid var(--rule);border-top-color:var(--accent);animation:ldspin .8s linear infinite;margin:0 auto 12px}
+@keyframes ldspin{to{transform:rotate(360deg)}}
+.ld-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.ld-head h3{font-size:22px;font-weight:700}
+.ld-head p{font-size:13px;color:var(--muted)}
+.ld-score{font-family:var(--f-display);font-weight:800;font-size:40px;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;text-align:right}
+.ld-score small{font-size:14px;color:var(--muted);font-weight:500}
+.ld-tabs{display:flex;gap:4px;margin:16px 0 14px;border-bottom:1px solid var(--rule);overflow-x:auto}
+.ld-tab{font:inherit;font-size:14px;font-weight:600;padding:9px 12px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.ld-tab[aria-selected="true"]{color:var(--text);border-color:var(--accent)}
+.ld-panel{display:grid;gap:14px;font-size:14.5px}
+.ld-panel h4{font-family:var(--f-display);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.ld-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.ld-split{grid-template-columns:1fr}}
+.ld-box{border-radius:14px;padding:12px 14px;min-width:0}
+.ld-box ul{margin:0;padding-left:18px;display:grid;gap:3px}
+.ld-box.pos{background:var(--green-soft)}.ld-box.neg{background:var(--orange-soft)}.ld-box.info{background:var(--blue-soft)}
+.ld-card{border:1px solid var(--rule);border-radius:14px;padding:12px 14px;background:var(--bg)}
+.ld-card b{display:block;font-family:var(--f-display);font-size:16px}
+.ld-card em{font-style:normal;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text)}
+.ld-card p{color:var(--muted);font-size:13.5px;margin-top:3px}
+.ld-note{font-size:12px;color:var(--muted);font-style:italic}
+.ld-foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);border-top:1px solid var(--rule);padding-top:12px}
+.ld-foot a{font-weight:600;color:var(--accent-text);text-decoration:none}
 
 /* ===== embedded demo app (scoped) ===== */
 #demoApp{
@@ -435,13 +472,19 @@ footer a{text-decoration:none;font-weight:600;color:var(--text)}
 </div>
 
 <div class="band"><div class="wrap"><section class="s" id="demo">
-  <div class="demo-head"><div class="s-head"><span class="eyebrow">Live demo</span><h2>Try it on a real business, right here.</h2><p>Paste a Google Maps link or type a name and city, then hit Analyze.</p></div></div>
+  <div class="demo-head"><div class="s-head"><span class="eyebrow" id="demoEyebrow">Live demo</span><h2 id="demoH">Try it on a real business, right here.</h2><p id="demoP">Paste a Google Maps link or type a name and city, then hit Analyze.</p></div></div>
   <div class="demo-frame">
     <div class="demo-bar"><i></i><i></i><i></i><span>Proof to Profit · live demo</span></div>
-    <div id="demoFallback" hidden style="padding:36px 24px;text-align:center;background:#FAFAF8;color:#14161A;font-family:var(--f-body)">
-      <h3 style="font-family:var(--f-display);font-size:24px;margin-bottom:10px">The live demo runs on Claude</h3>
-      <p style="color:#5B5B5B;max-width:26em;margin:0 auto 20px">This copy of the site is running outside Claude, so the AI engine isn't connected here. Open the hosted version to try it.</p>
-      <a class="btn btn-primary" href="https://claude.ai/artifact/Hjcz7itTiAepUEoaAamFgY" target="_blank" rel="noopener">Open the live demo</a>
+    <div id="demoFallback" hidden class="ld">
+      <div class="ld-top">
+        <p class="ld-pick-label">Pick a sample business</p>
+        <div class="ld-picks" id="ldPicks" role="tablist"></div>
+      </div>
+      <div class="ld-stage" id="ldStage" aria-live="polite"></div>
+      <div class="ld-foot">
+        <span>Light demo: illustrative sample data, no AI running.</span>
+        <a href="https://claude.ai/artifact/Hjcz7itTiAepUEoaAamFgY" target="_blank" rel="noopener">Open the full live demo →</a>
+      </div>
     </div>
     <div id="demoApp">
 <div class="help-btn" id="helpBtn" title="Show tutorial">?</div>
@@ -554,7 +597,7 @@ footer a{text-decoration:none;font-weight:600;color:var(--text)}
 </div>
     </div>
   </div>
-  <div class="demo-notes">
+  <div class="demo-notes" id="demoNotes">
     <p>The demo runs on a shared AI allowance. If you see a usage-limit message, try again a little later.</p>
     <p>If your browser asks to let the page use web search, allow it for competitor results grounded in live data. Without it, results are AI estimates and are labelled that way.</p>
   </div>
@@ -1692,6 +1735,62 @@ document.getElementById('limitOk').addEventListener('click', () => {
   await loadRecentSearches();
 })();
 
-(function(){ if(typeof claude==="undefined"||!claude||typeof claude.use!=="function"){ var a=document.getElementById("demoApp"),f=document.getElementById("demoFallback"); if(a&&f){a.style.display="none";f.hidden=false;} } })();
+(function(){ if(typeof claude==="undefined"||!claude||typeof claude.use!=="function"){ var a=document.getElementById("demoApp"),f=document.getElementById("demoFallback"); if(a&&f){a.style.display="none";f.hidden=false;document.getElementById("demoEyebrow").textContent="Quick demo";document.getElementById("demoH").textContent="See a report in seconds.";document.getElementById("demoP").textContent="Pick a sample business to explore the kind of report you get. For a live analysis of any real business, open the full demo.";var n=document.getElementById("demoNotes");if(n)n.style.display="none";} } })();
+
+(function(){
+var D=[
+ {id:'cafe',name:'Harbour Street Café',kind:'Café',city:'Illustrative, coastal town',rating:4.3,reviews:'1,240',
+  aspects:[['Food',88],['Service',72],['Ambience',84],['Value',68],['Wait time',48]],
+  love:['Flat whites and fresh pastries','Sunny terrace seating','Friendly baristas'],slip:['Weekend queues','Slow table clearing','Pricey sandwiches'],
+  fixes:[['Add a second till on weekend mornings','Queues are the most repeated complaint, so shorter waits lift the lowest score fastest.'],['Promote pre-order pickup','Moves demand off the counter at peak times.'],['Add a lunch combo','Targets the value comments without discounting coffee.']],
+  season:{up:['Spiced lattes','Warm pastries'],down:['Iced drinks'],tip:'Cooler months favour hot drinks and indoor seating, so prep the heaters and a seasonal menu early.'},
+  camps:[['Autumn menu Reel','Reel','Show the sunny terrace with the new spiced latte to tie a loved vibe to the season.'],['Weekday lunch email','Email','Offer the combo to nearby offices to fill quieter days.']],
+  comps:[['Dockside Roasters','Waterfront','Known for fast takeaway service'],['The Bread Loft','Old Town','Loved for artisan baking']],
+  win:['Match their speed with pre-order pickup','Lean into the terrace, which they lack']},
+ {id:'salon',name:'Linden & Co Salon',kind:'Hair salon',city:'Illustrative, city centre',rating:4.6,reviews:'610',
+  aspects:[['Skill',92],['Service',85],['Ambience',80],['Value',62],['Booking ease',55]],
+  love:['Precise cuts and colour','Stylists listen carefully','Calm, clean space'],slip:['Hard to book at weekends','Prices not shown online','Running late'],
+  fixes:[['Open online booking with live slots','Booking friction is the weakest score and is easy to fix.'],['Publish a price guide','Removes surprise and lifts the value score.'],['Text a reminder and a delay notice','Sets expectations when appointments run over.']],
+  season:{up:['Colour refreshes','Event styling'],down:['Quick trims'],tip:'Party season drives colour and styling bookings, so open extra weekend slots ahead of time.'},
+  camps:[['Before and after Carousel','Carousel post','Show colour transformations to build proof for new clients.'],['Rebooking nudge','Email','Invite clients back at the 8 week mark.']],
+  comps:[['Studio Nine','High Street','Known for walk-in availability'],['Thread & Shear','Market Square','Loved for low prices']],
+  win:['Beat them on booking with live slots','Anchor on skill and show the work']},
+ {id:'clinic',name:'Oakridge Family Dental',kind:'Dental clinic',city:'Illustrative, suburb',rating:4.4,reviews:'380',
+  aspects:[['Care',90],['Staff',84],['Cleanliness',89],['Value',64],['Wait time',52]],
+  love:['Gentle, explains each step','Spotless rooms','Kind front desk'],slip:['Waiting past appointment time','Billing confusion','Phone not answered'],
+  fixes:[['Stagger appointment starts','Waiting is the lowest score and affects every visit.'],['Send itemised cost estimates before treatment','Reduces billing surprises.'],['Add online messaging for simple requests','Takes pressure off the phone line.']],
+  season:{up:['Check-ups before year end','Whitening'],down:['Elective work'],tip:'Insurance benefits often reset at year end, so remind patients to book before then.'},
+  camps:[['Year-end benefits reminder','Email','Prompt patients to use remaining cover.'],['Meet the team Story','Story','Humanise the practice for nervous first-timers.']],
+  comps:[['Brightside Dental','Station Road','Known for evening hours'],['Maple Smiles','Town Centre','Loved for family packages']],
+  win:['Offer one late evening a week','Publish transparent pricing']}
+];
+var picks=document.getElementById('ldPicks'),stage=document.getElementById('ldStage');
+if(!picks||!stage)return;
+var cur=null,tab='over';
+function sc(v){return v>=75?'':v>=55?'mid':'low'}
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function li(a){return '<ul>'+a.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'}
+function panel(b){
+ if(tab==='over') return '<div class="bars">'+b.aspects.map(function(a){return '<div class="bar-row"><span>'+esc(a[0])+'</span><div class="bar"><i class="'+sc(a[1])+'" style="width:'+a[1]+'%"></i></div><span>'+(a[1]/20).toFixed(1)+'</span></div>'}).join('')+'</div><div class="ld-split"><div class="ld-box pos"><h4>Customers love</h4>'+li(b.love)+'</div><div class="ld-box neg"><h4>Where it slips</h4>'+li(b.slip)+'</div></div>';
+ if(tab==='fix') return b.fixes.map(function(f,i){return '<div class="ld-card"><em>Step '+(i+1)+'</em><b>'+esc(f[0])+'</b><p>Why: '+esc(f[1])+'</p></div>'}).join('')+'<div class="ld-box info"><h4>Seasonal outlook</h4><p>Rising: '+esc(b.season.up.join(', '))+'. Watch: '+esc(b.season.down.join(', '))+'.</p><p>'+esc(b.season.tip)+'</p></div><p class="ld-note">Directional ideas, not a guaranteed forecast.</p>';
+ if(tab==='camp') return b.camps.map(function(c){return '<div class="ld-card"><em>'+esc(c[1])+'</em><b>'+esc(c[0])+'</b><p>'+esc(c[2])+'</p></div>'}).join('');
+ return b.comps.map(function(c){return '<div class="ld-card"><b>'+esc(c[0])+' <span style="font-weight:400;color:var(--muted);font-size:12.5px">· '+esc(c[1])+'</span></b><p>Their edge: '+esc(c[2])+'</p></div>'}).join('')+'<div class="ld-box info"><h4>How to win</h4>'+li(b.win)+'</div>';
+}
+function render(){
+ var b=cur;
+ var tabs=[['over','Overview'],['fix','Fixes'],['camp','Campaigns'],['comp','Competitors']];
+ stage.innerHTML='<div class="ld-head"><div><h3>'+esc(b.name)+'</h3><p>'+esc(b.kind)+' · '+esc(b.city)+' · '+esc(b.reviews)+' reviews</p></div><div class="ld-score">'+b.rating.toFixed(1)+'<small>/5</small></div></div><div class="ld-tabs" role="tablist">'+tabs.map(function(x){return '<button class="ld-tab" role="tab" data-t="'+x[0]+'" aria-selected="'+(tab===x[0])+'">'+x[1]+'</button>'}).join('')+'</div><div class="ld-panel">'+panel(b)+'</div>';
+ Array.prototype.forEach.call(stage.querySelectorAll('.ld-tab'),function(el){el.addEventListener('click',function(){tab=el.getAttribute('data-t');render()})});
+}
+var timer;
+function pick(id){
+ cur=D.filter(function(d){return d.id===id})[0];tab='over';
+ Array.prototype.forEach.call(picks.children,function(el){el.setAttribute('aria-selected',String(el.getAttribute('data-id')===id))});
+ stage.innerHTML='<div class="ld-load"><div><div class="ld-spin"></div>Reading the reviews&hellip;</div></div>';
+ clearTimeout(timer);timer=setTimeout(render,900);
+}
+D.forEach(function(d){var b=document.createElement('button');b.className='ld-pick';b.setAttribute('role','tab');b.setAttribute('aria-selected','false');b.setAttribute('data-id',d.id);b.innerHTML=esc(d.name)+'<small>'+esc(d.kind)+'</small>';b.addEventListener('click',function(){pick(d.id)});picks.appendChild(b)});
+stage.innerHTML='<div class="ld-empty">Choose a sample business above to see the kind of report Proof to Profit produces.</div>';
+})();
 </script>
 </body></html>
