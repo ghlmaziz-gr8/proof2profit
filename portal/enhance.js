@@ -47,6 +47,29 @@
     "svg.in .enh-radar-data{transform:scale(1);opacity:1}",
     ".enh-radar-data circle{transition:r .2s;cursor:pointer}.enh-radar-data circle:hover{r:6}",
     ".radar-wrap svg polygon[stroke='var(--line)'],.radar-wrap svg line{opacity:0;transition:opacity .8s}svg.in polygon[stroke='var(--line)'],svg.in line{opacity:1}",
+    /* radar: roomy labels + live animation */
+    ".radar-wrap svg{width:76%!important;max-width:330px!important;margin:0 auto;display:block;height:auto!important;aspect-ratio:1}",
+    ".enh-sweep{transform-origin:130px 130px;opacity:0;pointer-events:none}",
+    "svg.in .enh-sweep{animation:enhSweep 6.5s linear 1.3s 1 both}",
+    "@keyframes enhSweep{0%{opacity:0;transform:rotate(0)}8%{opacity:1}88%{opacity:1}100%{opacity:0;transform:rotate(720deg)}}",
+    "svg.in .enh-radar-data polygon{animation:enhGlow 3.4s ease-in-out 1.3s infinite alternate}",
+    "@keyframes enhGlow{from{filter:drop-shadow(0 0 2px rgba(246,149,0,.25))}to{filter:drop-shadow(0 0 11px rgba(246,149,0,.75))}}",
+    ".enh-ping{fill:none;stroke-width:1.6;opacity:0;transform-box:fill-box;transform-origin:center;pointer-events:none}",
+    "svg.in .enh-ping{animation:enhPing 2.8s ease-out infinite}",
+    "@keyframes enhPing{0%{opacity:.8;transform:scale(1)}70%,100%{opacity:0;transform:scale(4.2)}}",
+    ".radar-wrap svg text{opacity:0;transition:opacity .7s}svg.in text{opacity:1}",
+    /* hero: comet ring, shimmer, tiles rise */
+    ".enh-ring-live:before{content:'';position:absolute;inset:-7px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 68%,rgba(255,180,56,.9) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));animation:enhSpin 3.6s linear infinite}",
+    "@keyframes enhSpin{to{transform:rotate(360deg)}}",
+    ".enh-hero>.enh-shine{position:absolute!important;z-index:0!important}",
+    ".enh-shine{position:absolute;top:0;bottom:0;left:-40%;width:30%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.10),transparent);transform:skewX(-18deg);pointer-events:none;animation:enhShine 9s ease-in-out 1.4s infinite;z-index:0}",
+    "@keyframes enhShine{0%{left:-40%}18%,100%{left:140%}}",
+    ".enh-kpi{animation:enhRise .6s cubic-bezier(.2,.8,.2,1) both}.enh-kpi:nth-child(2){animation-delay:.12s}.enh-kpi:nth-child(3){animation-delay:.24s}",
+    "@keyframes enhRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}",
+    ".enh-contact{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}",
+    ".enh-contact a,.enh-contact span{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border-radius:99px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);color:#fff;font:500 13px 'Inter',sans-serif;text-decoration:none;max-width:100%;overflow-wrap:anywhere;animation:enhRise .6s .3s cubic-bezier(.2,.8,.2,1) both}",
+    ".enh-contact a:hover{background:rgba(255,180,56,.22);border-color:rgba(255,180,56,.5)}",
+    "@media (prefers-reduced-motion:reduce){.enh-sweep,.enh-ping,.enh-shine,.enh-ring-live:before,.enh-kpi,.enh-contact a,.enh-contact span,.enh-radar-data polygon{animation:none!important}.enh-sweep{display:none}}",
     /* trend */
     ".enh-trend path.enh-line{stroke-linecap:round;stroke-linejoin:round}",
     ".enh-trend circle{opacity:0;transform-box:fill-box;transform-origin:center;transform:scale(0);cursor:pointer}",
@@ -312,6 +335,22 @@
           c.setAttribute("data-tip", (pc ? "Business " + pc + " · " : "") + lbl);
         });
       });
+      // scanning beam (plays twice, then fades) behind the data
+      var first = $(".enh-radar-data", svg);
+      if (first && !RM) {
+        var sw = sv("g", { class: "enh-sweep" });
+        sw.appendChild(sv("path", { d: "M130 130 L130 46 A84 84 0 0 1 184 65.6 Z", fill: "rgba(246,149,0,.20)" }));
+        sw.appendChild(sv("line", { x1: 130, y1: 130, x2: 184, y2: 65.6, stroke: "rgba(246,149,0,.7)", "stroke-width": 1.5 }));
+        first.parentNode.insertBefore(sw, first);
+      }
+      // gently pulsing rings on every point
+      $$(".enh-radar-data", svg).forEach(function (g) {
+        $$("circle", g).forEach(function (c, i) {
+          var pg = sv("circle", { class: "enh-ping", cx: c.getAttribute("cx"), cy: c.getAttribute("cy"), r: 4, stroke: c.getAttribute("fill") });
+          pg.style.animationDelay = (1.5 + i * 0.35) + "s";
+          g.appendChild(pg);
+        });
+      });
       watchLater(svg, svg);
     });
   }
@@ -375,7 +414,7 @@
       var avg = bars.length ? Math.round(bars.reduce(function (a, b) { return a + b; }, 0) / bars.length) : null;
 
       var hero = h("div", "enh-hero");
-      var ring = h("div", "enh-ring");
+      var ring = h("div", "enh-ring" + (isNaN(rating) ? "" : " enh-ring-live"));
       var circ = 2 * Math.PI * 46;
       var s = sv("svg", { viewBox: "0 0 110 110" });
       var defs = sv("defs", {}), g = sv("linearGradient", { id: "enhGrad", x1: "0", y1: "0", x2: "1", y2: "1" });
@@ -392,6 +431,7 @@
 
       var txt = h("div", "enh-text");
       txt.appendChild(name); var addr = $(".biz-addr", card); if (addr) txt.appendChild(addr);
+      var bcon = $(".biz-contact", card); if (bcon) { bcon.className = "enh-contact"; txt.appendChild(bcon); }
       var kp = h("div", "enh-kpis");
       var k1 = h("div", "enh-kpi", "<small>Reviews</small>"); var revMissing = !revTxt || /^(unknown|—|n\/a)$/i.test(revTxt); var kb = h("b", "", revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
       if (revMissing) kb.style.fontSize = "0.72em";
@@ -403,10 +443,11 @@
       }
       txt.appendChild(kp);
       if (isNaN(rating) || revMissing) {
-        var nt = h("p", "enh-nodata", "Rating and review count come from live Google data, which wasn't available for this business. The scores below are AI estimates, not measured from its actual reviews.");
+        var nt = h("p", "enh-nodata", "Rating, review count, website, phone and latest review date come from live Google data, which wasn't available for this business. The scores below are AI estimates, not measured from its actual reviews.");
         txt.appendChild(nt);
       }
       hero.appendChild(txt);
+      if (!RM) hero.insertBefore(h("div", "enh-shine"), hero.firstChild);
       stats.remove();
       card.insertBefore(hero, card.firstChild);
       watchLater(ring, ring);

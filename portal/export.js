@@ -62,7 +62,8 @@
     if (o.guidance || (o.rising || []).length || (o.watch || []).length) body += '<div class="card"><h2>Trend outlook</h2>' + (o.rising || []).map(function (x) { return '<span class="ch u">↑ ' + esc(x) + "</span>"; }).join("") + (o.watch || []).map(function (x) { return '<span class="ch d">↓ ' + esc(x) + "</span>"; }).join("") + (o.guidance ? "<p>" + esc(o.guidance) + "</p>" : "") + "</div>";
     var ideas = (a.campaign_ideas && a.campaign_ideas.ideas) || [];
     if (ideas.length) body += '<div class="card"><h2>Campaign ideas</h2>' + ideas.slice(0, 6).map(function (i) { return "<p><b>" + esc(i.title) + "</b>" + (i.format ? " <span class='ch'>" + esc(i.format) + "</span>" : "") + "<br>" + esc(i.angle) + (i.reasoning ? "<br><i>Why this: " + esc(i.reasoning) + "</i>" : "") + "</p>"; }).join("") + "</div>";
-    return { html: wrap(a.name || "Business analysis", a.address || "Review analysis", body), name: slug(a.name) };
+    var bits = [a.address || "Review analysis"]; if (a.website) bits.push(a.website); if (a.phone) bits.push(a.phone); if (a.last_review) bits.push("Last review: " + a.last_review);
+    return { html: wrap(a.name || "Business analysis", bits.join(" · "), body), name: slug(a.name) };
   }
 
   function compareDoc(a, b) {

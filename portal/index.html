@@ -741,6 +741,9 @@ ${groundingBlock}Then output the JSON object matching exactly this shape:
   "address": "string, short address or city/state",
   "rating": number (0-5, one decimal) or null if unknown,
   "review_count": "string estimate, or 'Unknown' if you don't have a basis",
+  "website": "the business's own website URL, ONLY if it appears in the search results above, otherwise null",
+  "phone": "the business phone number, ONLY if it appears in the search results above, otherwise null",
+  "last_review": "when the most recent customer review was posted (e.g. '2 weeks ago' or 'October 2026'), ONLY if the search results state it, otherwise null",
   "aspects": [
     {"name": "Food", "score": number 0-100},
     {"name": "Service", "score": number 0-100},
@@ -782,6 +785,13 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
   const rt = Number(parsed.rating), rc = String(parsed.review_count == null ? '' : parsed.review_count).trim();
   if(!parsed._grounded || !(rt > 0 && rt <= 5)) parsed.rating = null; else parsed.rating = Math.round(rt * 10) / 10;
   if(!parsed._grounded || !/\d/.test(rc)) parsed.review_count = null;
+  // Contact details and review recency: same rule, only from real search results, and shape-checked.
+  const web = String(parsed.website || '').trim(), ph = String(parsed.phone || '').trim(), lr = String(parsed.last_review || '').trim();
+  const webOk = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}([\/?#]\S*)?$/i.test(web);
+  parsed.website = (parsed._grounded && webOk) ? (/^https?:\/\//i.test(web) ? web : 'https://' + web) : null;
+  const digits = ph.replace(/\D/g, '');
+  parsed.phone = (parsed._grounded && digits.length >= 10 && digits.length <= 11 && ph.length <= 24) ? ph : null;
+  parsed.last_review = (parsed._grounded && lr && lr.length <= 40 && !/^(unknown|n\/a|null)$/i.test(lr)) ? lr : null;
   return parsed;
 }
 
@@ -1110,6 +1120,18 @@ async function renderSavedDetail(slug){
   });
 }
 
+function escHtml(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function contactHtml(d){
+  const bits = [];
+  if(d.website){
+    let host = d.website; try{ host = new URL(d.website).hostname.replace(/^www\./,''); }catch(e){}
+    bits.push(`<a href="${escHtml(d.website)}" target="_blank" rel="noopener noreferrer">🌐 ${escHtml(host)}</a>`);
+  }
+  if(d.phone) bits.push(`<a href="tel:${escHtml(String(d.phone).replace(/[^\d+]/g,''))}">📞 ${escHtml(d.phone)}</a>`);
+  if(d.last_review) bits.push(`<span>🕒 Last review: ${escHtml(d.last_review)}</span>`);
+  return bits.length ? `<div class="biz-contact">${bits.join('')}</div>` : '';
+}
+
 function renderReport(data){
   const aspectsHtml = (data.aspects || []).map(a => `
     <div class="aspect">
@@ -1159,6 +1181,7 @@ function renderReport(data){
     <div class="card">
       <p class="biz-name">${data.name || 'Unknown business'}${data._grounded ? ' <span class="best-badge" style="vertical-align:middle;">Live search</span>' : ''}</p>
       <p class="biz-addr">${data.address || ''}</p>
+      ${contactHtml(data)}
 
       <div class="stat-grid">
         <div class="stat"><p class="label">Rating</p><p class="value">${data.rating ?? '—'}<span style="font-size:13px;color:var(--ink-soft);"> / 5</span></p></div>
