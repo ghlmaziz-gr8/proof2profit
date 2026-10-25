@@ -1437,8 +1437,11 @@ async function analyze(){
 
 function cmpMeta(x){
   const rc = x.review_count, okRc = rc != null && rc !== '' && !/^(unknown|—|n\/a)$/i.test(String(rc));
-  const rt = (typeof x.rating === 'number' || (x.rating != null && x.rating !== '' && !isNaN(parseFloat(x.rating)))) ? x.rating + '/5' : 'Rating not available';
-  return rt + ' · ' + (okRc ? rc + ' reviews' : 'review count not available');
+  const sc = (x.aspects || []).map(q => Number(q.score)).filter(v => !isNaN(v));
+  const ai = sc.length ? Math.max(1, Math.min(5, Math.round(sc.reduce((p, c) => p + c, 0) / sc.length / 20 * 10) / 10)) : null;
+  const rt = (typeof x.rating === 'number' || (x.rating != null && x.rating !== '' && !isNaN(parseFloat(x.rating)))) ? x.rating + '/5' : (ai != null ? 'AI rating ' + ai + '/5' : '');
+  const th = (x.likes || []).length + (x.dislikes || []).length;
+  return [rt, okRc ? rc + ' reviews' : (th ? th + ' themes found' : '')].filter(Boolean).join(' · ');
 }
 
 function renderComparison(a, b){

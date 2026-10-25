@@ -413,6 +413,11 @@
       var bars = $$(".bar-fill", card).map(function (b) { return parseFloat(b.style.width) || 0; });
       var avg = bars.length ? Math.round(bars.reduce(function (a, b) { return a + b; }, 0) / bars.length) : null;
 
+      var aiRating = null;
+      if (isNaN(rating) && avg != null) { aiRating = Math.max(1, Math.min(5, Math.round(avg / 20 * 10) / 10)); rating = aiRating; }
+      var themes = 0;
+      $$(":scope > .list-block", card).forEach(function (lb) { if (/love|slips/i.test(($(".list-title", lb) || {}).textContent || "")) themes += $$("li", lb).length; });
+
       var hero = h("div", "enh-hero");
       var ring = h("div", "enh-ring" + (isNaN(rating) ? "" : " enh-ring-live"));
       var circ = 2 * Math.PI * 46;
@@ -426,24 +431,25 @@
       $(".pr", s).style.strokeDasharray = circ; $(".pr", s).style.strokeDashoffset = circ;
       var ct = h("div", "ct"); var num = h("span", "", isNaN(rating) ? "n/a" : (RM ? rating.toFixed(1) : "0.0"));
       if (!isNaN(rating)) { num.dataset.count = rating; num.dataset.dec = 1; } else num.style.fontSize = "0.62em";
-      ct.appendChild(num); ct.appendChild(h("small", "", isNaN(rating) ? "NO RATING" : "OUT OF 5")); ring.appendChild(ct);
+      ct.appendChild(num); ct.appendChild(h("small", "", isNaN(rating) ? "NO RATING" : (aiRating != null ? "AI RATING" : "OUT OF 5"))); ring.appendChild(ct);
       hero.appendChild(ring);
 
       var txt = h("div", "enh-text");
       txt.appendChild(name); var addr = $(".biz-addr", card); if (addr) txt.appendChild(addr);
       var bcon = $(".biz-contact", card); if (bcon) { bcon.className = "enh-contact"; txt.appendChild(bcon); }
       var kp = h("div", "enh-kpis");
-      var k1 = h("div", "enh-kpi", "<small>Reviews</small>"); var revMissing = !revTxt || /^(unknown|—|n\/a)$/i.test(revTxt); var kb = h("b", "", revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
-      if (revMissing) kb.style.fontSize = "0.72em";
-      if (!isNaN(revNum) && /^[\d,]+$/.test(revTxt)) { kb.dataset.count = revNum; kb.dataset.dec = 0; } else if (!isNaN(revNum)) { kb.textContent = revTxt; }
+      var revMissing = !revTxt || /^(unknown|—|n\/a)$/i.test(revTxt); var useThemes = revMissing && themes > 0;
+      var k1 = h("div", "enh-kpi", "<small>" + (useThemes ? "Themes found" : "Reviews") + "</small>"); var kb = h("b", "", useThemes ? (RM ? String(themes) : "0") : revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
+      if (useThemes) { kb.dataset.count = themes; kb.dataset.dec = 0; } else if (revMissing) kb.style.fontSize = "0.72em";
+      if (!useThemes && !isNaN(revNum) && /^[\d,]+$/.test(revTxt)) { kb.dataset.count = revNum; kb.dataset.dec = 0; } else if (!isNaN(revNum)) { kb.textContent = revTxt; }
       k1.appendChild(kb); kp.appendChild(k1);
       if (avg != null) {
         var k2 = h("div", "enh-kpi", "<small>Avg score</small>"); var b2 = h("b", "", RM ? avg : "0"); b2.dataset.count = avg; b2.dataset.dec = 0; k2.appendChild(b2); kp.appendChild(k2);
         var k3 = h("div", "enh-kpi", "<small>Aspects</small>"); var b3 = h("b", "", String(bars.length)); k3.appendChild(b3); kp.appendChild(k3);
       }
       txt.appendChild(kp);
-      if (isNaN(rating) || revMissing) {
-        var nt = h("p", "enh-nodata", "Rating, review count, website, phone and latest review date come from live Google data, which wasn't available for this business. The scores below are AI estimates, not measured from its actual reviews.");
+      if (aiRating != null || revMissing) {
+        var nt = h("p", "enh-nodata", "AI rating = the average of the four aspect scores out of 5, calculated by our AI from what guests say. It is an assessment, not Google's star rating.");
         txt.appendChild(nt);
       }
       hero.appendChild(txt);
