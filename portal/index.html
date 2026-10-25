@@ -1102,34 +1102,6 @@ async function renderSavedDetail(slug){
   });
 }
 
-function triggerConfirmationEmail(email, bizName){
-  const subject = `You've added ${bizName} to your P2P list`;
-  const body = `Hi!\n\nJust confirming — ${bizName} is now on your My Businesses list in P2P.\n\nCheck back anytime to re-run the analysis and see what's changed since your last check-in — new things customers love, new concerns showing up, and your best check-in so far.\n\nSee you soon,\nP2P`;
-  const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.open(mailto, '_blank');
-}
-
-async function handlePostSaveEmail(bizName){
-  const savedEmail = await storageGetJSON('reviewlens_user_email', null);
-  if(savedEmail){
-    triggerConfirmationEmail(savedEmail, bizName);
-    return;
-  }
-  const wrap = document.getElementById('emailCaptureWrap');
-  if(!wrap) return;
-  wrap.style.display = 'block';
-  document.getElementById('emailCaptureSend').addEventListener('click', async () => {
-    const val = document.getElementById('emailCaptureInput').value.trim();
-    if(!val || !val.includes('@')) return;
-    await storageSetJSON('reviewlens_user_email', val);
-    triggerConfirmationEmail(val, bizName);
-    wrap.style.display = 'none';
-  });
-  document.getElementById('emailCaptureSkip').addEventListener('click', () => {
-    wrap.style.display = 'none';
-  });
-}
-
 function renderReport(data){
   const aspectsHtml = (data.aspects || []).map(a => `
     <div class="aspect">
@@ -1210,15 +1182,6 @@ function renderReport(data){
         <button class="p2x-share-btn" type="button" data-share="single">✉ Share by email</button>
         <button class="p2x-share-btn" type="button" data-export="single" aria-haspopup="menu">⬇ Export</button>
       </div>
-      <div id="emailCaptureWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);">
-        <p style="font-size:13px;margin:0 0 8px;">Want a confirmation email when you save a business?</p>
-        <div class="input-row">
-          <input type="email" id="emailCaptureInput" placeholder="you@email.com" />
-          <button id="emailCaptureSend" style="white-space:nowrap;">Yes, email me</button>
-        </div>
-        <p class="outlook-disclaimer" style="margin-top:6px;">This opens a draft in your own mail app for you to send — nothing is emailed automatically or stored on a server.</p>
-        <p class="tut-skip" id="emailCaptureSkip" style="padding:8px 0 0;text-align:center;">No thanks</p>
-      </div>
     </div>
 
     <div class="card" id="competitorCard">
@@ -1254,7 +1217,6 @@ function renderReport(data){
     if(result.success){
       saveBizBtn.textContent = storageAvailable ? '✓ Saved — check My Businesses' : '✓ Saved for this session';
       saveBizBtn.classList.add('saved');
-      handlePostSaveEmail(data.name);
     }else{
       saveBizBtn.textContent = 'Save to My Businesses';
       saveBizBtn.disabled = false;
