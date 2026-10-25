@@ -186,6 +186,9 @@
   .save-btn-row{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px;}
   .save-biz-btn{background:none;border:1.5px solid var(--coral);color:var(--coral-dark);font-weight:600;font-size:13px;padding:9px 18px;border-radius:10px;cursor:pointer;}
   .save-biz-btn.saved{border-color:var(--good);color:var(--good);}
+  .save-biz-btn:hover:not(:disabled){background:rgba(245,158,11,.14);color:var(--coral-dark);}
+  .save-biz-btn.saved:hover,.save-biz-btn.saved:disabled{background:rgba(31,157,116,.10);color:var(--good);}
+  .tut-skip:hover{background:none;color:var(--ink);}
 
   .back-link{font-size:13px;color:var(--ink-soft);cursor:pointer;margin-bottom:14px;display:inline-block;}
   .detail-name{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;margin:0 0 2px;}
