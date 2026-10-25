@@ -1399,6 +1399,12 @@ async function analyze(){
   }
 }
 
+function cmpMeta(x){
+  const rc = x.review_count, okRc = rc != null && rc !== '' && !/^(unknown|—|n\/a)$/i.test(String(rc));
+  const rt = (typeof x.rating === 'number' || (x.rating != null && x.rating !== '' && !isNaN(parseFloat(x.rating)))) ? x.rating + '/5' : 'Rating not available';
+  return rt + ' · ' + (okRc ? rc + ' reviews' : 'review count not available');
+}
+
 function renderComparison(a, b){
   const aspectNames = [...new Set([...(a.aspects||[]).map(x=>x.name), ...(b.aspects||[]).map(x=>x.name)])];
 
@@ -1431,8 +1437,8 @@ function renderComparison(a, b){
   reportEl.innerHTML = `
     <div class="card">
       <div class="cmp-header">
-        <div class="cmp-biz a"><p class="cn">${a.name||'Business A'}</p><p class="cr">${a.rating??'—'}/5 · ${a.review_count??'—'} reviews</p></div>
-        <div class="cmp-biz b"><p class="cn">${b.name||'Business B'}</p><p class="cr">${b.rating??'—'}/5 · ${b.review_count??'—'} reviews</p></div>
+        <div class="cmp-biz a"><p class="cn">${a.name||'Business A'}</p><p class="cr">${cmpMeta(a)}</p></div>
+        <div class="cmp-biz b"><p class="cn">${b.name||'Business B'}</p><p class="cr">${cmpMeta(b)}</p></div>
       </div>
 
       <p class="section-label">Aspect comparison</p>

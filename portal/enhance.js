@@ -68,13 +68,14 @@
     ".enh-kpi{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:9px 13px;min-width:104px}",
     ".enh-kpi small{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#BDB8AE}",
     ".enh-kpi b{font:600 21px 'Space Grotesk',sans-serif;color:#fff}",
+    ".enh-nodata{margin:12px 0 0;font:500 12.5px/1.45 'Inter',sans-serif;color:#c9c3b8;max-width:46ch}",
     ".enh-ring{position:relative;width:118px;height:118px}",
     ".enh-ring svg{width:100%;height:100%;transform:rotate(-90deg)}",
     ".enh-ring .tr{fill:none;stroke:rgba(255,255,255,.12);stroke-width:9}",
     ".enh-ring .pr{fill:none;stroke:url(#enhGrad);stroke-width:9;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289;transition:stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1)}",
     ".enh-ring.in .pr{stroke-dashoffset:var(--off)}",
     ".enh-ring .ct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 30px/1 'Space Grotesk',sans-serif;color:#fff}",
-    ".enh-ring .ct small{font:600 11px 'Inter',sans-serif;color:#FFB438;letter-spacing:.06em;margin-top:3px}",
+    ".enh-ring .ct small{text-align:center;font:600 11px 'Inter',sans-serif;color:#FFB438;letter-spacing:.06em;margin-top:3px}",
     ".enh-grid{display:grid;gap:0 32px;grid-template-columns:minmax(0,1fr)}",
     ".enh-cgrid{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}",
     ".enh-grid .list-block:first-child{border-top:0;margin-top:0;padding-top:0}",
@@ -384,22 +385,28 @@
       ring.appendChild(s);
       ring.style.setProperty("--off", isNaN(rating) ? circ : (circ * (1 - Math.min(rating, 5) / 5)));
       $(".pr", s).style.strokeDasharray = circ; $(".pr", s).style.strokeDashoffset = circ;
-      var ct = h("div", "ct"); var num = h("span", "", isNaN(rating) ? "—" : (RM ? rating.toFixed(1) : "0.0"));
-      if (!isNaN(rating)) { num.dataset.count = rating; num.dataset.dec = 1; }
-      ct.appendChild(num); ct.appendChild(h("small", "", "OUT OF 5")); ring.appendChild(ct);
+      var ct = h("div", "ct"); var num = h("span", "", isNaN(rating) ? "n/a" : (RM ? rating.toFixed(1) : "0.0"));
+      if (!isNaN(rating)) { num.dataset.count = rating; num.dataset.dec = 1; } else num.style.fontSize = "0.62em";
+      ct.appendChild(num); ct.appendChild(h("small", "", isNaN(rating) ? "NO RATING" : "OUT OF 5")); ring.appendChild(ct);
       hero.appendChild(ring);
 
       var txt = h("div", "enh-text");
       txt.appendChild(name); var addr = $(".biz-addr", card); if (addr) txt.appendChild(addr);
       var kp = h("div", "enh-kpis");
-      var k1 = h("div", "enh-kpi", "<small>Reviews</small>"); var kb = h("b", "", isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0"));
+      var k1 = h("div", "enh-kpi", "<small>Reviews</small>"); var revMissing = !revTxt || /^(unknown|—|n\/a)$/i.test(revTxt); var kb = h("b", "", revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
+      if (revMissing) kb.style.fontSize = "0.72em";
       if (!isNaN(revNum) && /^[\d,]+$/.test(revTxt)) { kb.dataset.count = revNum; kb.dataset.dec = 0; } else if (!isNaN(revNum)) { kb.textContent = revTxt; }
       k1.appendChild(kb); kp.appendChild(k1);
       if (avg != null) {
         var k2 = h("div", "enh-kpi", "<small>Avg score</small>"); var b2 = h("b", "", RM ? avg : "0"); b2.dataset.count = avg; b2.dataset.dec = 0; k2.appendChild(b2); kp.appendChild(k2);
         var k3 = h("div", "enh-kpi", "<small>Aspects</small>"); var b3 = h("b", "", String(bars.length)); k3.appendChild(b3); kp.appendChild(k3);
       }
-      txt.appendChild(kp); hero.appendChild(txt);
+      txt.appendChild(kp);
+      if (isNaN(rating) || revMissing) {
+        var nt = h("p", "enh-nodata", "Rating and review count come from live Google data, which wasn't available for this business. The scores below are AI estimates, not measured from its actual reviews.");
+        txt.appendChild(nt);
+      }
+      hero.appendChild(txt);
       stats.remove();
       card.insertBefore(hero, card.firstChild);
       watchLater(ring, ring);

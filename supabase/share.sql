@@ -2,6 +2,15 @@
 -- The browser sends only structured report data; the email HTML is built here with every value escaped,
 -- so nobody can push arbitrary HTML out of our sending domain. Safe to re-run.
 
+-- "Unknown"/empty values show as "not available" in shared emails
+create or replace function public.p2p_na(v text) returns text language sql immutable as $$
+  select case when v is null or btrim(v) = '' or lower(btrim(v)) in ('unknown', 'n/a', '—') then null else v end
+$$;
+
+create or replace function public.p2p_escn(v text) returns text language sql immutable as $$
+  select case when v is null then null else public.p2p_esc(v) end
+$$;
+
 create or replace function public.p2p_score_color(s numeric) returns text language sql immutable as $$
   select case when s >= 75 then '#1F9D74' when s >= 50 then '#E0A21B' else '#D9534F' end
 $$;
@@ -41,8 +50,8 @@ begin
     head := an || ' vs ' || bn;
     sub := 'Side-by-side review comparison';
     body := '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-      || '<td width="50%" valign="top" style="padding:0 6px 0 0"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">A</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(an) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || public.p2p_esc(coalesce(p_a ->> 'rating', '—')) || ' / 5 &middot; ' || public.p2p_esc(coalesce(p_a ->> 'review_count', '—')) || ' reviews</div></div></td>'
-      || '<td width="50%" valign="top" style="padding:0 0 0 6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">B</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(bn) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || public.p2p_esc(coalesce(p_b ->> 'rating', '—')) || ' / 5 &middot; ' || public.p2p_esc(coalesce(p_b ->> 'review_count', '—')) || ' reviews</div></div></td></tr></table>';
+      || '<td width="50%" valign="top" style="padding:0 6px 0 0"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">A</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(an) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || coalesce(public.p2p_escn(public.p2p_na(p_a ->> 'rating')) || ' / 5', 'Rating not available') || ' &middot; ' || coalesce(public.p2p_escn(public.p2p_na(p_a ->> 'review_count')) || ' reviews', 'review count not available') || '</div></div></td>'
+      || '<td width="50%" valign="top" style="padding:0 0 0 6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">B</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(bn) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || coalesce(public.p2p_escn(public.p2p_na(p_b ->> 'rating')) || ' / 5', 'Rating not available') || ' &middot; ' || coalesce(public.p2p_escn(public.p2p_na(p_b ->> 'review_count')) || ' reviews', 'review count not available') || '</div></div></td></tr></table>';
 
     select array_agg(g.nme order by g.o) into names from (
       select q.nme, min(q.o) as o from (
@@ -81,8 +90,9 @@ begin
     head := coalesce(nullif(left(a ->> 'name', 80), ''), 'Business analysis');
     sub := coalesce(nullif(left(a ->> 'address', 120), ''), 'Review analysis');
     body := '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-      || '<td width="50%" style="padding-right:6px"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">RATING</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || public.p2p_esc(coalesce(a ->> 'rating', '—')) || '<span style="font-size:13px;color:#7A756C"> / 5</span></div></div></td>'
-      || '<td width="50%" style="padding-left:6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">REVIEW VOLUME</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || public.p2p_esc(coalesce(a ->> 'review_count', '—')) || '</div></div></td></tr></table>';
+      || '<td width="50%" style="padding-right:6px"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">RATING</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(public.p2p_na(a ->> 'rating')) || '<span style="font-size:13px;color:#7A756C"> / 5</span>', '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td>'
+      || '<td width="50%" style="padding-left:6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">REVIEW VOLUME</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(public.p2p_na(a ->> 'review_count')), '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td></tr></table>'
+      || case when public.p2p_na(a ->> 'rating') is null or public.p2p_na(a ->> 'review_count') is null then '<p style="margin:12px 0 0;font-size:12.5px;line-height:18px;color:#7A756C">Rating and review count come from live Google data, which was not available for this business. The scores below are AI estimates.</p>' else '' end;
     body := body || public.p2p_h('Aspect breakdown');
     if jsonb_typeof(a -> 'aspects') = 'array' then
       for asp in select value from jsonb_array_elements(a -> 'aspects') limit 12 loop

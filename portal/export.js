@@ -5,6 +5,7 @@
   var P = function () { return window.__p2pProgress; };
   function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function col(s) { return s >= 75 ? "#1F9D74" : s >= 50 ? "#E0A21B" : "#D9534F"; }
+  function na(v) { return v == null || v === "" || /^(unknown|—|n\/a)$/i.test(String(v)) ? null : v; }
   function lab(s) { return s >= 85 ? "Strongest" : s >= 70 ? "Strong" : s >= 50 ? "Mixed" : "Needs attention"; }
   function dstr(ts) { return new Date(ts).toLocaleDateString("default", { month: "long", day: "numeric", year: "numeric" }); }
   function slug(s) { return String(s || "report").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "report"; }
@@ -49,7 +50,7 @@
   }
 
   function singleDoc(a, history) {
-    var body = '<div class="card"><div class="st"><div><small>RATING</small><b>' + esc(a.rating == null ? "—" : a.rating) + ' <span style="font-size:13px;color:#7a756c">/ 5</span></b></div><div><small>REVIEW VOLUME</small><b>' + esc(a.review_count == null ? "—" : a.review_count) + "</b></div></div></div>";
+    var body = '<div class="card"><div class="st"><div><small>RATING</small><b>' + (na(a.rating) == null ? '<span style="font-size:15px;color:#7a756c">Not available</span>' : esc(a.rating) + ' <span style="font-size:13px;color:#7a756c">/ 5</span>') + '</b></div><div><small>REVIEW VOLUME</small><b>' + (na(a.review_count) == null ? '<span style="font-size:15px;color:#7a756c">Not available</span>' : esc(a.review_count)) + "</b></div></div>" + ((na(a.rating) == null || na(a.review_count) == null) ? '<p style="margin:12px 0 0;font-size:13px;color:#7a756c">Rating and review count come from live Google data, which was not available for this business. The scores below are AI estimates.</p>' : "") + "</div>";
     if (history && history.length && P()) {
       var last = history[history.length - 1];
       body += progressBlock(P().compare(last, { ts: Date.now(), rating: a.rating, avgScore: P().avgOf(a.aspects), aspects: a.aspects || [], likes: a.likes || [], dislikes: a.dislikes || [] }), "Compared with the assessment from " + dstr(last.ts) + ".");
@@ -78,7 +79,7 @@
       return '<div class="as"><div class="t"><div>' + esc(n) + "</div></div>" + bar("A", sa, "#E8943A") + bar("B", sb, "#2E8F8F") + "</div>";
     }).join("");
     var v = aw > bw ? "<b>" + esc(a.name) + "</b> comes out ahead, leading on " + aw + " aspect" + (aw === 1 ? "" : "s") + " vs " + bw + " for " + esc(b.name) + "." : bw > aw ? "<b>" + esc(b.name) + "</b> comes out ahead, leading on " + bw + " aspect" + (bw === 1 ? "" : "s") + " vs " + aw + " for " + esc(a.name) + "." : esc(a.name) + " and " + esc(b.name) + " are closely matched overall, each leading in different areas.";
-    var body = '<div class="card st" style="padding:14px"><div><small>A</small><b style="font-size:18px">' + esc(a.name) + '</b><br><span style="font-size:13px">' + esc(a.rating == null ? "—" : a.rating) + " / 5 · " + esc(a.review_count == null ? "—" : a.review_count) + ' reviews</span></div><div><small>B</small><b style="font-size:18px">' + esc(b.name) + '</b><br><span style="font-size:13px">' + esc(b.rating == null ? "—" : b.rating) + " / 5 · " + esc(b.review_count == null ? "—" : b.review_count) + " reviews</span></div></div>" +
+    var body = '<div class="card st" style="padding:14px"><div><small>A</small><b style="font-size:18px">' + esc(a.name) + '</b><br><span style="font-size:13px">' + (na(a.rating) == null ? "Rating not available" : esc(a.rating) + " / 5") + " · " + (na(a.review_count) == null ? "review count not available" : esc(a.review_count) + " reviews") + '</span></div><div><small>B</small><b style="font-size:18px">' + esc(b.name) + '</b><br><span style="font-size:13px">' + (na(b.rating) == null ? "Rating not available" : esc(b.rating) + " / 5") + " · " + (na(b.review_count) == null ? "review count not available" : esc(b.review_count) + " reviews") + "</span></div></div>" +
       '<div class="card"><h2>Aspect comparison</h2>' + rows + "</div>" +
       '<div class="card"><h2 class="g">What guests love</h2><div class="two"><div><h3>' + esc(a.name) + "</h3><ul>" + li(a.likes) + "</ul></div><div><h3>" + esc(b.name) + "</h3><ul>" + li(b.likes) + '</ul></div></div><h2 class="r" style="margin-top:18px">Where each slips</h2><div class="two"><div><h3>' + esc(a.name) + "</h3><ul>" + li(a.dislikes) + "</ul></div><div><h3>" + esc(b.name) + "</h3><ul>" + li(b.dislikes) + "</ul></div></div></div>" +
       '<div class="vd"><b class="k">VERDICT</b>' + v + (learn.length ? "<br><br>" + esc(learn.slice(0, 3).join(". ")) + "." : "") + "</div>";
