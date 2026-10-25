@@ -28,6 +28,11 @@
             gate.hidden = true;
             chip.hidden = false;
             chipEmail.textContent = (s.user && s.user.email) || "Signed in";
+            window.__p2p = { sb: sb, session: function () { return session; } };
+            sb.rpc("ensure_profile").then(function () {
+              window.__p2p.ready = true;
+              window.dispatchEvent(new CustomEvent("p2p:ready"));
+            });
             resolveReady();
           } else {
             gate.hidden = false;
@@ -107,12 +112,46 @@
           });
         },
         set: function (obj) {
-          return sb.from("kv").upsert({ key: key, value: obj.value, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" })
-            .then(function (r) { if (r.error) throw r.error; });
+          var pre = /^reviewlens_hist_/.test(key)
+            ? sb.from("kv").select("value").eq("key", key).maybeSingle().then(function (r) { return r.data && r.data.value; }, function () { return null; })
+            : Promise.resolve(null);
+          return pre.then(function (prev) { return writeKv(key, obj, prev); });
         },
       };
     },
   };
+
+  function latest(arr) {
+    if (!Array.isArray(arr) || !arr.length) return null;
+    return arr.reduce(function (a, b) { return (b && b.ts || 0) > (a && a.ts || 0) ? b : a; });
+  }
+  function slugName(slug) {
+    return sb.from("kv").select("value").eq("key", "reviewlens_saved_index").maybeSingle().then(function (r) {
+      var list = (r.data && r.data.value) || [];
+      for (var i = 0; i < list.length; i++) if (list[i].slug === slug) return list[i].name;
+      return slug.replace(/-/g, " ");
+    }, function () { return slug.replace(/-/g, " "); });
+  }
+  function checkAlert(key, prev, next) {
+    var a = latest(prev), b = latest(next && next.value !== undefined ? next.value : next);
+    if (!a || !b || (b.ts || 0) <= (a.ts || 0)) return;
+    var dr = (b.rating || 0) - (a.rating || 0), ds = (b.avgScore || 0) - (a.avgScore || 0);
+    if (Math.abs(dr) < 0.1 && Math.abs(ds) < 5) return;
+    slugName(key.replace(/^reviewlens_hist_/, "")).then(function (name) {
+      var bits = [];
+      if (Math.abs(dr) >= 0.1) bits.push("rating " + (dr > 0 ? "up" : "down") + " from " + a.rating + " to " + b.rating);
+      if (Math.abs(ds) >= 5) bits.push("overall score " + (ds > 0 ? "up" : "down") + " from " + a.avgScore + " to " + b.avgScore);
+      sb.rpc("notify_alert", { p_title: name + ": changes since your last run", p_body: "Compared with your previous analysis: " + bits.join(", ") + "." })
+        .then(function () { window.dispatchEvent(new CustomEvent("p2p:notify")); });
+    });
+  }
+  function writeKv(key, obj, prev) {
+    return sb.from("kv").upsert({ key: key, value: obj.value, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" })
+      .then(function (r) {
+        if (r.error) throw r.error;
+        if (prev) checkAlert(key, prev, obj);
+      });
+  }
 
   window.claude = {
     use: function (name) {

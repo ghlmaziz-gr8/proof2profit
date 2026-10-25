@@ -430,9 +430,10 @@
 (function(){var d=document.getElementById("privacyDlg");document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest(".open-privacy");if(a){e.preventDefault();if(d.showModal)d.showModal();}});})();
 </script>
 <style>
+  html,body{overflow-x:clip}
   .auth-fine{font-size:12px!important;color:#6b7280;margin:14px 0 0!important;line-height:1.45}
   .auth-fine a,.privacy-foot a{color:inherit;text-decoration:underline;cursor:pointer}
-  .privacy-foot{text-align:center;font-size:12px;color:#8a8f98;margin:6px 0 24px}
+  .privacy-foot{position:fixed;left:0;right:0;bottom:8px;text-align:center;font-size:12px;color:#8a8f98;margin:0;pointer-events:none;z-index:5}.privacy-foot a{pointer-events:auto}
   .privacy-dlg{border:none;border-radius:18px;padding:24px 26px;max-width:440px;width:calc(100% - 32px);box-shadow:0 24px 60px rgba(0,0,0,.35);font-size:14px;line-height:1.5;color:#1f2430}
   .privacy-dlg::backdrop{background:rgba(10,12,18,.55)}
   .privacy-dlg h3{margin:0 0 10px;font-family:'Space Grotesk',sans-serif;font-size:20px}
@@ -442,6 +443,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="shim.js"></script>
+<script src="extras.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
