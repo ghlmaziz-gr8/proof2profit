@@ -209,107 +209,258 @@
 
 
   // ---------- team & access (roles) ----------
-  var adm = el("dialog", { class: "p2x-modal p2x-wide" });
+  var adm = el("dialog", { class: "p2x-modal p2x-wide p2x-rich" });
   document.body.appendChild(adm);
   function errText(r) { return (r && r.error && r.error.message) || ""; }
   function isStaff() { return !!(me && CAN_INVITE[me.role]) && me.role !== "owner"; }
-  function agoDay(iso) { try { return new Date(iso).toLocaleDateString(); } catch (e) { return ""; } }
+  function agoDay(iso) { try { return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; } }
+  var ROLE_INFO = {
+    super: ["Super user", "Full control of everything", "M12 2l2.6 6.2L21 9l-5 4.4L17.5 20 12 16.6 6.5 20 8 13.4 3 9l6.4-.8z"],
+    admin: ["Admin", "Manages sales and owners", "M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z"],
+    sales: ["Sales", "Brings in business owners", "M3 17l6-6 4 4 8-8M15 7h6v6"],
+    owner: ["Business owner", "Analyzes and builds a team", "M4 10l1.5-5h13L20 10M5 10v9h14v-9M9 19v-5h6v5"],
+    member: ["Team member", "Manager or marketing crew", "M16 11a4 4 0 10-8 0 4 4 0 008 0zM4 21c0-4 3.6-6 8-6s8 2 8 6"]
+  };
+  function svgIcon(d) {
+    var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("aria-hidden", "true");
+    var p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); s.appendChild(p); return s;
+  }
+  function initials(email) { var n = (email || "?").split("@")[0].replace(/[^a-z0-9]/gi, " ").trim().split(/\s+/); return ((n[0] || "?")[0] + ((n[1] || "")[0] || "")).toUpperCase(); }
+  function hue(email) { var h = 0; for (var i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) % 360; return h; }
+  (function () {
+    var l = document.createElement("link"); l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Instrument+Sans:wght@500;600&display=swap";
+    document.head.appendChild(l);
+    var c = [
+      ".p2x-rich{width:min(720px,calc(100vw - 24px));overflow:hidden;background:#FBF8F3;font-family:'Instrument Sans',system-ui,sans-serif}",
+      ".p2x-rich .p2x-body{padding:0;gap:0}",
+      ".p2x-hero{position:relative;overflow:hidden;background:#14161A;color:#F3EFE8;padding:26px 26px 22px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap}",
+      ".p2x-hero:before{content:'';position:absolute;width:340px;height:340px;left:-80px;top:-150px;border-radius:50%;background:radial-gradient(circle,rgba(246,149,0,.42),transparent 65%);animation:p2xDrift 9s ease-in-out infinite alternate}",
+      ".p2x-hero:after{content:'';position:absolute;width:300px;height:300px;right:-90px;bottom:-170px;border-radius:50%;background:radial-gradient(circle,rgba(0,140,187,.38),transparent 65%);animation:p2xDrift 11s ease-in-out infinite alternate-reverse}",
+      ".p2x-hgrid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:26px 26px}",
+      ".p2x-hero>div{position:relative;z-index:1}",
+      ".p2x-hero small{display:block;font:600 10.5px 'Instrument Sans',sans-serif;letter-spacing:.16em;color:#FFB438;margin-bottom:8px}",
+      ".p2x-hero h3{font:800 27px/1.05 'Bricolage Grotesque','Space Grotesk',sans-serif!important;letter-spacing:-.01em;margin:0}",
+      ".p2x-hero h3 span{color:#F69500}",
+      ".p2x-hero p{margin:8px 0 0;font-size:13.5px;color:#C9C4BA;max-width:360px}",
+      ".p2x-mini{margin-top:22px;width:178px;background:#fff;border-radius:14px;padding:12px 13px;box-shadow:0 18px 34px -12px rgba(0,0,0,.65);animation:p2xFloat 5s ease-in-out infinite}",
+      ".p2x-mini b{display:flex;justify-content:space-between;font:800 11px 'Bricolage Grotesque',sans-serif;color:#14161A}",
+      ".p2x-mini i{display:block;height:6px;border-radius:3px;background:#F3EEE6;margin-top:7px;overflow:hidden}",
+      ".p2x-mini i:after{content:'';display:block;height:100%;border-radius:3px;width:0;background:var(--c);animation:p2xBar 3.6s cubic-bezier(.2,.8,.2,1) infinite;animation-delay:var(--d)}",
+      ".p2x-x{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:17px;line-height:1;padding:0}",
+      ".p2x-x:hover{background:rgba(255,255,255,.24)}",
+      ".p2x-main{padding:20px 26px 8px;display:flex;flex-direction:column;gap:14px;max-height:calc(88vh - 150px);overflow:auto}",
+      ".p2x-sec{font:700 11px 'Instrument Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#A85A00;margin:0}",
+      ".p2x-roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}",
+      ".p2x-rc{position:relative;text-align:left;border:1.5px solid #E6DFD3;background:#fff;border-radius:14px;padding:12px 12px 11px;cursor:pointer;font:inherit;color:#14161A;transition:transform .18s,box-shadow .18s,border-color .18s;opacity:0;animation:p2xIn .45s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:var(--d)}",
+      ".p2x-rc:hover{transform:translateY(-2px);box-shadow:0 12px 24px -14px rgba(20,22,26,.4)}",
+      ".p2x-rc svg{width:22px;height:22px;stroke:#A85A00;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-bottom:6px;display:block;transition:transform .3s}",
+      ".p2x-rc b{display:block;font:800 14px 'Bricolage Grotesque',sans-serif}",
+      ".p2x-rc span{display:block;font-size:11.5px;color:#6b665e;margin-top:1px}",
+      ".p2x-rc.on{border-color:#F69500;background:#FFF6E6;box-shadow:0 0 0 3px rgba(246,149,0,.2)}",
+      ".p2x-rc.on svg{transform:scale(1.18) rotate(-6deg);stroke:#F69500}",
+      ".p2x-rc.on:after{content:'\\2713';position:absolute;top:8px;right:9px;width:18px;height:18px;border-radius:50%;background:#F69500;color:#14161A;font:800 11px/18px sans-serif;text-align:center;animation:p2xPop .3s}",
+      ".p2x-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:560px){.p2x-fields{grid-template-columns:1fr}}",
+      ".p2x-fields label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#5E5A54}",
+      ".p2x-fields input{padding:12px 13px;border:1.5px solid #E6DFD3;border-radius:12px;font:500 14px 'Instrument Sans',sans-serif;background:#fff;color:#14161A;min-width:0;transition:border-color .15s,box-shadow .15s}",
+      ".p2x-fields input:focus{outline:0;border-color:#008CBB;box-shadow:0 0 0 3px rgba(0,140,187,.18)}",
+      ".p2x-prev{display:flex;gap:11px;align-items:center;background:#14161A;color:#F3EFE8;border-radius:14px;padding:11px 14px;font-size:13px;min-width:0}",
+      ".p2x-prev .av{flex:0 0 34px;height:34px;border-radius:10px;background:#F69500;color:#14161A;font:800 13px/34px 'Bricolage Grotesque',sans-serif;text-align:center}",
+      ".p2x-prev div{min-width:0;overflow-wrap:anywhere}.p2x-prev em{font-style:normal;color:#FFB438;font-weight:600}",
+      ".p2x-send{position:relative;overflow:hidden;border:0;border-radius:14px;padding:14px 20px;background:#F69500;color:#14161A;font:800 16px 'Bricolage Grotesque',sans-serif;cursor:pointer;display:flex;gap:9px;align-items:center;justify-content:center;transition:transform .15s,box-shadow .15s}",
+      ".p2x-send:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 14px 26px -12px rgba(246,149,0,.8)}",
+      ".p2x-send:disabled{opacity:.6;cursor:default}",
+      ".p2x-send:before{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.5) 50%,transparent 70%);transform:translateX(-120%);animation:p2xShine 3.4s ease-in-out infinite}",
+      ".p2x-send svg{width:19px;height:19px;stroke:#14161A;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;position:relative}",
+      ".p2x-send.go svg{animation:p2xFly .7s ease-in forwards}",
+      ".p2x-ok{display:none;text-align:center;padding:18px 8px 6px;position:relative}",
+      ".p2x-ok.show{display:block;animation:p2xIn .4s forwards}",
+      ".p2x-ok .ck{width:64px;height:64px;margin:0 auto 10px;border-radius:50%;background:#7FA10A;display:flex;align-items:center;justify-content:center;animation:p2xPop .5s}",
+      ".p2x-ok .ck svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30;animation:p2xDraw .5s .25s forwards}",
+      ".p2x-ok h4{font:800 20px 'Bricolage Grotesque',sans-serif;margin:0;color:#14161A;text-transform:none;letter-spacing:0}",
+      ".p2x-ok p{margin:4px 0 12px;color:#5E5A54;font-size:13.5px;overflow-wrap:anywhere}",
+      ".p2x-conf{position:absolute;left:50%;top:30px;width:8px;height:12px;border-radius:2px;opacity:0;animation:p2xConf 1.1s ease-out forwards}",
+      ".p2x-listwrap{padding:8px 26px 22px}",
+      ".p2x-person{display:flex;gap:12px;align-items:center;padding:11px 12px;background:#fff;border:1px solid #EFE9DE;border-radius:14px;margin-top:8px;opacity:0;animation:p2xIn .4s forwards;animation-delay:var(--d);flex-wrap:wrap}",
+      ".p2x-person .av{flex:0 0 38px;height:38px;border-radius:12px;font:800 14px/38px 'Bricolage Grotesque',sans-serif;text-align:center;color:#14161A}",
+      ".p2x-person .info{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}",
+      ".p2x-person .info b{font-size:14px;color:#14161A;font-weight:600}",
+      ".p2x-person .info small{display:flex;align-items:center;gap:6px;color:#6b665e;font-size:12px;margin-top:1px;flex-wrap:wrap}",
+      ".p2x-dot{width:8px;height:8px;border-radius:50%;background:#C9C4BA;display:inline-block}.p2x-dot.on{background:#7FA10A;box-shadow:0 0 0 3px rgba(127,161,10,.2)}",
+      ".p2x-pill{display:inline-block;padding:2px 9px;border-radius:99px;background:#FDEBCF;color:#8a4c00;font:700 10.5px 'Instrument Sans',sans-serif;letter-spacing:.04em;margin-left:6px;vertical-align:1px}",
+      ".p2x-rich select{padding:7px 9px;border:1.5px solid #E6DFD3;border-radius:10px;font:500 12.5px 'Instrument Sans',sans-serif;background:#fff;color:#14161A}",
+      ".p2x-msgx{font-size:13px;min-height:0;margin:0;color:#b91c1c;font-weight:600}",
+      "@keyframes p2xIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}",
+      "@keyframes p2xPop{0%{transform:scale(0)}70%{transform:scale(1.2)}100%{transform:scale(1)}}",
+      "@keyframes p2xDraw{to{stroke-dashoffset:0}}",
+      "@keyframes p2xBar{0%{width:0}35%,85%{width:var(--w)}100%{width:0}}",
+      "@keyframes p2xFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-7px) rotate(1deg)}}",
+      "@keyframes p2xDrift{from{transform:translate(0,0)}to{transform:translate(50px,30px)}}",
+      "@keyframes p2xShine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}",
+      "@keyframes p2xFly{0%{transform:translate(0,0)}60%{transform:translate(40px,-14px);opacity:0}61%{transform:translate(-40px,12px);opacity:0}100%{transform:none;opacity:1}}",
+      "@keyframes p2xConf{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),var(--y)) rotate(var(--r))}}",
+      "@media (prefers-reduced-motion:reduce){.p2x-rich *,.p2x-rich *:before,.p2x-rich *:after{animation-duration:.001s!important;animation-iteration-count:1!important}}"
+    ].join("");
+    var st2 = document.createElement("style"); st2.textContent = c; document.head.appendChild(st2);
+  })();
 
   function openAccess() {
     if (!me) return;
     var staff = isStaff(), owner = me.role === "owner";
     if (!staff && !owner) return;
+    var roles = staff ? CAN_INVITE[me.role].slice() : ["member"];
+    if (staff) roles.sort(function (a, b) { var o = ["owner", "sales", "admin", "super"]; return o.indexOf(a) - o.indexOf(b); });
+    var chosen = staff ? (roles.indexOf("owner") > -1 ? "owner" : roles[0]) : "member";
     adm.textContent = "";
     var body = el("div", { class: "p2x-body" });
-    body.appendChild(el("h3", null, staff ? "Invitations" : "My team"));
-    body.appendChild(el("p", { class: "p2x-note" }, staff
-      ? (me.role === "sales" ? "Invite business owners to Proof to Profit. You see the people you invited." : "Invite people to Proof to Profit. Only staff can see this list.")
-      : "Add the managers and marketing people who work with you. They get their own sign-in. You can have up to 5."));
-    var form = el("form", { class: "p2x-form" });
-    var em = el("input", { type: "email", placeholder: "email@example.com", required: "", maxlength: "120" });
-    form.appendChild(em);
-    var sel = null, note = null;
+
+    var hero = el("div", { class: "p2x-hero" });
+    hero.appendChild(el("div", { class: "p2x-hgrid", style: "position:absolute;inset:0" }));
+    var ht = el("div");
+    ht.appendChild(el("small", null, staff ? "INVITE-ONLY PLATFORM" : "YOUR TEAM"));
+    var h3 = el("h3"); h3.appendChild(document.createTextNode(staff ? "Bring someone to " : ""));
+    var sp = el("span", null, staff ? "Proof to Profit" : "Grow together"); h3.appendChild(sp); ht.appendChild(h3);
+    ht.appendChild(el("p", null, staff
+      ? "They get a beautiful invitation by email, then sign in with Google. " + (me.role === "sales" ? "You see everyone you invite." : "Only staff can see this list.")
+      : "Add your managers and marketing crew. They get their own sign-in. Up to 5 people."));
+    hero.appendChild(ht);
+    var mini = el("div", { class: "p2x-mini" });
+    [["Food", 88, "#7FA10A", "0s"], ["Service", 76, "#F69500", ".15s"], ["Value", 80, "#008CBB", ".3s"], ["Wait", 46, "#E0522D", ".45s"]].forEach(function (b) {
+      var bb = el("b", null, b[0]); bb.appendChild(el("span", null, (b[1] / 20).toFixed(1)));
+      mini.appendChild(bb); var i = el("i"); i.style.setProperty("--w", b[1] + "%"); i.style.setProperty("--c", b[2]); i.style.setProperty("--d", b[3]); mini.appendChild(i);
+    });
+    var wrapMini = el("div"); wrapMini.appendChild(mini); hero.appendChild(wrapMini);
+    var x = el("button", { class: "p2x-x", type: "button", "aria-label": "Close" }, "×");
+    x.addEventListener("click", function () { adm.close(); });
+    hero.appendChild(x);
+    body.appendChild(hero);
+
+    var main = el("div", { class: "p2x-main" });
+    var form = el("form");
+    form.style.cssText = "display:flex;flex-direction:column;gap:14px";
+
     if (staff) {
-      sel = el("select");
-      CAN_INVITE[me.role].forEach(function (r) { var o = el("option", { value: r }, ROLES[r]); sel.appendChild(o); });
-      if (me.role === "super" || me.role === "admin") sel.value = "owner";
-      form.appendChild(sel);
+      form.appendChild(el("p", { class: "p2x-sec" }, "1 · Choose a role"));
+      var grid = el("div", { class: "p2x-roles" });
+      var cards = {};
+      roles.forEach(function (r, idx) {
+        var c = el("button", { type: "button", class: "p2x-rc" + (r === chosen ? " on" : ""), "aria-pressed": r === chosen ? "true" : "false" });
+        c.style.setProperty("--d", (idx * 70) + "ms");
+        c.appendChild(svgIcon(ROLE_INFO[r][2]));
+        c.appendChild(el("b", null, ROLE_INFO[r][0])); c.appendChild(el("span", null, ROLE_INFO[r][1]));
+        c.addEventListener("click", function () {
+          chosen = r; Object.keys(cards).forEach(function (k) { cards[k].classList.toggle("on", k === r); cards[k].setAttribute("aria-pressed", k === r ? "true" : "false"); }); preview();
+        });
+        cards[r] = c; grid.appendChild(c);
+      });
+      form.appendChild(grid);
     }
-    note = el("input", { type: "text", placeholder: staff ? "Note (optional)" : "Title, e.g. Manager", maxlength: "60" });
-    form.appendChild(note);
-    var add = el("button", { class: "p2x-btn", type: "submit" }, staff ? "Invite" : "Add");
-    form.appendChild(add);
-    body.appendChild(form);
-    var msg = el("p", { class: "p2x-msg" });
-    body.appendChild(msg);
-    var list = el("div");
-    body.appendChild(list);
-    var row = el("div", { class: "p2x-row" });
-    var close = el("button", { class: "p2x-btn ghost", type: "button" }, "Close");
-    close.addEventListener("click", function () { adm.close(); });
-    row.appendChild(close); body.appendChild(row);
+    form.appendChild(el("p", { class: "p2x-sec" }, staff ? "2 · Who is it for?" : "Who are you adding?"));
+    var fields = el("div", { class: "p2x-fields" });
+    var l1 = el("label", null, "Email address"); var em = el("input", { type: "email", placeholder: "name@company.com", required: "", maxlength: "120", autocomplete: "off" }); l1.appendChild(em);
+    var l2 = el("label", null, staff ? "Personal note (optional)" : "Job title (optional)"); var note = el("input", { type: "text", placeholder: staff ? "Welcome aboard!" : "Manager, Marketing…", maxlength: "60", autocomplete: "off" }); l2.appendChild(note);
+    fields.appendChild(l1); fields.appendChild(l2); form.appendChild(fields);
+
+    var prev = el("div", { class: "p2x-prev" });
+    var pav = el("span", { class: "av" }, "✉"); var ptx = el("div"); prev.appendChild(pav); prev.appendChild(ptx); form.appendChild(prev);
+    function preview() {
+      var v = em.value.trim(); pav.textContent = v ? initials(v) : "✉";
+      ptx.textContent = "";
+      ptx.appendChild(document.createTextNode(v ? v : "They"));
+      ptx.appendChild(document.createTextNode(" will get an invitation as "));
+      ptx.appendChild(el("em", null, ROLE_INFO[chosen][0])); ptx.appendChild(document.createTextNode(" with a button to sign in with Google."));
+    }
+    em.addEventListener("input", preview); preview();
+
+    var msg = el("p", { class: "p2x-msgx" }); form.appendChild(msg);
+    var send = el("button", { class: "p2x-send", type: "submit" });
+    send.appendChild(el("span", null, staff ? "Send invitation" : "Add to my team"));
+    send.appendChild(svgIcon("M22 2L11 13M22 2l-7 20-4-9-9-4z"));
+    form.appendChild(send);
+
+    var ok = el("div", { class: "p2x-ok" });
+    var ck = el("div", { class: "ck" }); ck.appendChild(svgIcon("M5 12.5l4.5 4.5L19 7.5")); ok.appendChild(ck);
+    ok.appendChild(el("h4", null, "Invitation sent!")); var okp = el("p"); ok.appendChild(okp);
+    var again = el("button", { class: "p2x-btn ghost", type: "button" }, "Invite another"); ok.appendChild(again);
+    main.appendChild(form); main.appendChild(ok);
+    body.appendChild(main);
+
+    var lw = el("div", { class: "p2x-listwrap" });
+    lw.appendChild(el("p", { class: "p2x-sec" }, staff ? "Invitations" : "My team"));
+    var list = el("div"); lw.appendChild(list); body.appendChild(lw);
     adm.appendChild(body);
 
-    function say(t, bad) { msg.textContent = t || ""; msg.style.color = bad ? "#b91c1c" : "#047857"; }
+    function confetti() {
+      var cols = ["#F69500", "#008CBB", "#7FA10A", "#FFB438", "#E0522D"];
+      for (var i = 0; i < 26; i++) {
+        var c = el("span", { class: "p2x-conf" });
+        c.style.background = cols[i % cols.length];
+        c.style.setProperty("--x", (Math.random() * 360 - 180) + "px"); c.style.setProperty("--y", (Math.random() * 150 - 40) + "px"); c.style.setProperty("--r", (Math.random() * 540 - 270) + "deg");
+        c.style.animationDelay = (Math.random() * 120) + "ms"; ok.appendChild(c);
+        setTimeout((function (n) { return function () { if (n.parentNode) n.parentNode.removeChild(n); }; })(c), 1500);
+      }
+    }
+    again.addEventListener("click", function () { ok.classList.remove("show"); form.style.display = "flex"; em.value = ""; note.value = ""; preview(); em.focus(); });
+
     function render(items) {
       list.textContent = "";
-      if (!items.length) { list.appendChild(el("p", { class: "p2x-note" }, staff ? "No invitations yet." : "No team members yet.")); return; }
-      items.forEach(function (it) {
-        var li = el("div", { class: "p2x-li" });
-        var info = el("div");
-        var top = el("span", null, it.email);
-        top.appendChild(el("span", { class: "p2x-tag" }, ROLES[it.role] || it.role));
-        info.appendChild(top);
-        var bits = [it.joined ? "Signed in" : "Not signed in yet"];
+      if (!items.length) { list.appendChild(el("p", { class: "p2x-note", style: "margin-top:8px" }, staff ? "No invitations yet. Your first one is a click away." : "No team members yet.")); return; }
+      items.forEach(function (it, idx) {
+        var row = el("div", { class: "p2x-person" }); row.style.setProperty("--d", Math.min(idx, 8) * 50 + "ms");
+        var av = el("span", { class: "av" }, initials(it.email)); av.style.background = "hsl(" + hue(it.email) + ",78%,80%)"; row.appendChild(av);
+        var info = el("div", { class: "info" });
+        var top = el("b", null, it.email); top.appendChild(el("span", { class: "p2x-pill" }, (ROLE_INFO[it.role] || [it.role])[0])); info.appendChild(top);
+        var sm = el("small"); sm.appendChild(el("span", { class: "p2x-dot" + (it.joined ? " on" : "") }));
+        var bits = [it.joined ? "Signed in" : "Invitation pending"];
         if (it.title) bits.push(it.title);
-        if (it.note) bits.push(it.note);
-        if (staff && it.invited_by) bits.push("invited by " + it.invited_by);
+        if (staff && it.invited_by) bits.push("by " + it.invited_by);
         bits.push(agoDay(it.added_at));
-        info.appendChild(el("small", null, bits.join(" · ")));
-        li.appendChild(info);
-        var acts = el("div", { class: "p2x-row", style: "flex:0 0 auto" });
-        if (me.role === "super" && it.role !== "member" && it.email.toLowerCase() !== me.email.toLowerCase()) {
+        sm.appendChild(document.createTextNode(bits.join(" · "))); info.appendChild(sm); row.appendChild(info);
+        var acts = el("div", { class: "p2x-row", style: "flex:0 0 auto;align-items:center" });
+        var self = it.email.toLowerCase() === me.email.toLowerCase();
+        if (me.role === "super" && it.role !== "member" && !self) {
           var rs = el("select");
-          ["admin", "sales", "owner", "super"].forEach(function (r) { rs.appendChild(el("option", { value: r }, ROLES[r])); });
+          ["admin", "sales", "owner", "super"].forEach(function (r) { rs.appendChild(el("option", { value: r }, ROLE_INFO[r][0])); });
           rs.value = it.role;
           rs.addEventListener("change", function () {
             sb.rpc("set_role", { p_email: it.email, p_role: rs.value }).then(function (r) {
-              if (r.error) { say(errText(r), true); rs.value = it.role; } else { say("Role updated."); refresh(); }
+              if (r.error) { msg.textContent = errText(r); rs.value = it.role; } else { msg.textContent = ""; refresh(); }
             });
           });
           acts.appendChild(rs);
         }
-        if (it.email.toLowerCase() !== me.email.toLowerCase()) {
-          var rm = el("button", { class: "p2x-btn danger sm", type: "button" }, "Remove");
-          var armed = false;
+        if (!self) {
+          var rm = el("button", { class: "p2x-btn danger sm", type: "button" }, "Remove"), armed = false;
           rm.addEventListener("click", function () {
             if (!armed) { armed = true; rm.textContent = "Click again to confirm"; setTimeout(function () { armed = false; rm.textContent = "Remove"; }, 4000); return; }
             sb.rpc(staff ? "remove_user" : "remove_team_member", { p_email: it.email }).then(function (r) {
-              if (r.error) say(errText(r), true); else { say("Removed."); refresh(); }
+              if (r.error) msg.textContent = errText(r); else { msg.textContent = ""; refresh(); }
             });
           });
           acts.appendChild(rm);
         }
-        li.appendChild(acts); list.appendChild(li);
+        row.appendChild(acts); list.appendChild(row);
       });
     }
     function refresh() {
       sb.rpc(staff ? "list_invites" : "list_team").then(function (r) {
-        if (r.error) { say(errText(r), true); return; }
+        if (r.error) { msg.textContent = errText(r); return; }
         render(r.data || []);
       });
     }
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      add.disabled = true; say("");
+      send.disabled = true; msg.textContent = ""; send.classList.add("go");
+      var addr = em.value.trim();
       var call = staff
-        ? sb.rpc("invite_user", { p_email: em.value, p_role: sel.value, p_note: note.value || null })
-        : sb.rpc("invite_team_member", { p_email: em.value, p_title: note.value || null });
+        ? sb.rpc("invite_user", { p_email: addr, p_role: chosen, p_note: note.value || null })
+        : sb.rpc("invite_team_member", { p_email: addr, p_title: note.value || null });
       call.then(function (r) {
-        add.disabled = false;
-        if (r.error) { say(errText(r), true); return; }
-        say("Invited. They will get an email with the sign-in link.");
-        em.value = ""; note.value = ""; refresh();
+        send.disabled = false; send.classList.remove("go");
+        if (r.error) { msg.textContent = errText(r); return; }
+        okp.textContent = addr + " will get an email now, and can sign in with Google as " + ROLE_INFO[chosen][0] + ".";
+        form.style.display = "none"; ok.classList.add("show"); confetti(); refresh();
       });
     });
     refresh();
