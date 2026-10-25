@@ -138,6 +138,16 @@
         ab.addEventListener("click", function () { dlg.close(); openAccess(); });
         body.appendChild(ab);
       }
+      if (me.role === "super" || me.role === "admin" || me.role === "sales") {
+        var tb = el("button", { class: "p2x-btn ghost", type: "button" }, "Invitation tracker");
+        tb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("invites"); });
+        body.appendChild(tb);
+      }
+      if (me.role === "super" || me.role === "admin") {
+        var hb = el("button", { class: "p2x-btn ghost", type: "button" }, "Behavior & heat map");
+        hb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("behavior"); });
+        body.appendChild(hb);
+      }
     }
     function field(label, key, ph) {
       var l = el("label", null, label);
