@@ -454,6 +454,7 @@
 <script src="share.js"></script>
 <script src="progress.js"></script>
 <script src="export.js"></script>
+<script src="mybiz.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
@@ -1045,16 +1046,19 @@ async function renderSavedList(){
     wrap.innerHTML = '<p class="saved-empty">No businesses saved yet. Analyze one under Single business, then tap Save to track it here.</p>';
     return;
   }
-  const rows = await Promise.all(index.map(async b => {
-    const history = await storageGetJSON('reviewlens_hist_' + b.slug, []);
-    const latest = history[history.length - 1];
-    const meta = latest ? `Last checked ${new Date(latest.ts).toLocaleDateString('default',{month:'short',day:'numeric'})} · avg score ${latest.avgScore ?? '—'}` : 'No check-ins yet';
-    return `<div class="saved-row" data-slug="${b.slug}"><div><p class="saved-row-name">${b.name}</p><p class="saved-row-meta">${meta}</p></div><span style="color:var(--ink-soft);">›</span></div>`;
-  }));
-  wrap.innerHTML = rows.join('');
+  const items = await Promise.all(index.map(async b => ({ slug: b.slug, name: b.name, address: b.address, history: await storageGetJSON('reviewlens_hist_' + b.slug, []) })));
+  const My = window.__p2pMy;
+  if(!My){
+    wrap.innerHTML = items.map(it => { const l = it.history[it.history.length - 1]; return `<div class="saved-row" data-slug="${escHtml(it.slug)}"><div><p class="saved-row-name">${escHtml(it.name)}</p><p class="saved-row-meta">${l ? 'Last checked ' + new Date(l.ts).toLocaleDateString('default',{month:'short',day:'numeric'}) + ' · avg score ' + (l.avgScore ?? '—') : 'No check-ins yet'}</p></div><span style="color:var(--ink-soft);">›</span></div>`; }).join('');
+  }else{
+    wrap.innerHTML = My.dash(items) + items.map((it, i) => My.card(it, i)).join('');
+  }
   wrap.querySelectorAll('.saved-row').forEach(row => {
-    row.addEventListener('click', () => renderSavedDetail(row.dataset.slug));
+    const go = () => renderSavedDetail(row.dataset.slug);
+    row.addEventListener('click', go);
+    row.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); } });
   });
+  if(My) My.animate(wrap);
 }
 
 async function renderSavedDetail(slug){
@@ -1076,9 +1080,9 @@ async function renderSavedDetail(slug){
 
   detailWrap.innerHTML = `
     <p class="back-link" id="backToList">‹ All businesses</p>
+    ${window.__p2pMy ? window.__p2pMy.hero(biz, history) : ''}
     <div class="card">
-      <p class="detail-name">${biz.name}</p>
-      <p class="detail-meta">${biz.address || ''} · ${history.length} check-in${history.length !== 1 ? 's' : ''}</p>
+      ${window.__p2pMy ? '' : `<p class="detail-name">${escHtml(biz.name)}</p><p class="detail-meta">${escHtml(biz.address || '')} · ${history.length} check-in${history.length !== 1 ? 's' : ''}</p>`}
       ${buildTrendLine(history)}
       ${computeBestAndDiff(history)}
       <button id="recheckBtn" style="width:100%;margin-top:14px;">Re-check now</button>
@@ -1095,6 +1099,7 @@ async function renderSavedDetail(slug){
   `;
   if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
+  if(window.__p2pMy) window.__p2pMy.animate(detailWrap);
   document.getElementById('recheckBtn').addEventListener('click', async () => {
     const recheckBtn = document.getElementById('recheckBtn');
     recheckBtn.disabled = true;

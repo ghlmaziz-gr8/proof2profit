@@ -521,7 +521,7 @@
       call.then(function (r) {
         send.disabled = false; send.classList.remove("go");
         if (r.error) { msg.textContent = errText(r); return; }
-        okp.textContent = addr + " will get an email now, and can sign in with Google as " + ROLE_INFO[chosen][0] + ".";
+        okp.textContent = (r.data && r.data.existing) ? addr + " already has an account, so they are now on your team too. No email needed." : addr + " will get an email now, and can sign in with Google as " + ROLE_INFO[chosen][0] + ".";
         form.style.display = "none"; ok.classList.add("show"); confetti(); refresh();
       });
     });
