@@ -183,7 +183,7 @@
   .saved-row-name{font-size:14.5px;font-weight:600;font-family:'Space Grotesk',sans-serif;margin:0 0 3px;}
   .saved-row-meta{font-size:12px;color:var(--ink-soft);margin:0;}
   .saved-empty{text-align:center;color:var(--ink-soft);font-size:14px;padding:40px 20px;}
-  .save-btn-row{display:flex;justify-content:center;margin-top:4px;}
+  .save-btn-row{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px;}
   .save-biz-btn{background:none;border:1.5px solid var(--coral);color:var(--coral-dark);font-weight:600;font-size:13px;padding:9px 18px;border-radius:10px;cursor:pointer;}
   .save-biz-btn.saved{border-color:var(--good);color:var(--good);}
 
@@ -448,6 +448,7 @@
 <script src="enhance.js"></script>
 <script src="track.js"></script>
 <script src="insights.js"></script>
+<script src="share.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
@@ -1198,6 +1199,7 @@ function renderReport(data){
       ${campaignHtml}
       <div class="save-btn-row">
         <button class="save-biz-btn" id="saveBizBtn">+ Save to My Businesses</button>
+        <button class="p2x-share-btn" type="button" data-share="single">✉ Share by email</button>
       </div>
       <div id="emailCaptureWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);">
         <p style="font-size:13px;margin:0 0 8px;">Want a confirmation email when you save a business?</p>
@@ -1220,6 +1222,7 @@ function renderReport(data){
       <div id="competitorResults"></div>
     </div>
   `;
+  window.__p2pLast = { kind: 'single', a: data };
   setState('report');
   lastAnalyzedBusiness = { name: data.name, address: data.address };
   document.getElementById('competitorBtn').addEventListener('click', findCompetitors);
@@ -1473,8 +1476,10 @@ function renderComparison(a, b){
       </div>
 
       <div class="verdict">${verdict}${learnHtml}</div>
+      <div class="save-btn-row" style="margin-top:14px;"><button class="p2x-share-btn" type="button" data-share="compare">✉ Share this comparison by email</button></div>
     </div>
   `;
+  window.__p2pLast = { kind: 'compare', a: a, b: b };
   setState('report');
 }
 

@@ -3,7 +3,7 @@
 (function () {
   "use strict";
   var sb = null, role = null, dlg = null, RM = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var NAMES = { home: "Search (home)", report: "Report", compare: "Compare setup", "compare-report": "Compare report", saved: "My Businesses", "saved-detail": "Business trend", analytics: "Analytics", loading: "Analysis loading", profile: "Profile", invitations: "Invitations", privacy: "Privacy notice" };
+  var NAMES = { home: "Search (home)", report: "Report", compare: "Compare setup", "compare-report": "Compare report", saved: "My Businesses", "saved-detail": "Business trend", analytics: "Analytics", loading: "Analysis loading", profile: "Profile", invitations: "Invitations", share: "Share by email", privacy: "Privacy notice" };
   var DEVICES = { d: "Desktop", t: "Tablet", m: "Mobile" };
   function nm(s) { return NAMES[s] || s; }
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }

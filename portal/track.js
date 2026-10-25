@@ -10,7 +10,7 @@
   function shown(id) { var e = document.getElementById(id); return !!e && e.style.display !== "none" && getComputedStyle(e).display !== "none"; }
   function section() {
     var d = document.querySelector("dialog[open]");
-    if (d) { if (d.id === "privacyDlg") return "privacy"; if (d.className.indexOf("p2i") > -1) return "insights"; if (d.className.indexOf("p2x-rich") > -1) return "invitations"; return "profile"; }
+    if (d) { if (d.id === "privacyDlg") return "privacy"; if (d.className.indexOf("p2i") > -1) return "insights"; if (d.className.indexOf("p2x-rich") > -1) return "invitations"; if (d.className.indexOf("p2s-modal") > -1) return "share"; return "profile"; }
     if (shown("analyticsSection") && document.getElementById("analyticsSection").classList.contains("active")) return "analytics";
     var saved = document.getElementById("savedSection");
     if (saved && saved.classList.contains("active")) return shown("savedDetailWrap") && document.getElementById("savedDetailWrap").innerHTML ? "saved-detail" : "saved";
@@ -32,7 +32,7 @@
       [".trend-line-wrap", "Trend chart"], [".campaign-card", "Campaign idea"], [".enh-hero", "Report header"], [".step", "Next step"],
       [".chip", "Trend chip"], [".p2x-bell,.p2x-panel", "Notification bell"], ["#userChip", "Profile chip"], ["#signOutBtn", "Sign out"],
       ["#helpBtn", "Help"], [".privacy-foot,.open-privacy", "Privacy link"], [".p2x-rc", "Role card"], [".p2x-send", "Send invitation"],
-      [".p2x-modal", "Dialog"], [".powered-by", "Powered by link"], [".enh-welcome", "Welcome panel"]
+      [".p2x-share-btn", "Share by email"], [".p2s-send", "Send share email"], [".p2x-modal", "Dialog"], [".powered-by", "Powered by link"], [".enh-welcome", "Welcome panel"]
     ];
     for (var i = 0; i < rules.length; i++) {
       var n = el.closest(rules[i][0]);

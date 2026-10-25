@@ -45,3 +45,6 @@ Run `supabase/roles.sql` once (done on the live project). Roles: super user (eve
 - Business owner: adds up to 5 team members (managers, marketing); sees only their own team.
 - Team member: no invite rights.
 The invite list is only reachable through role-checked database functions, so owners and members cannot read it.
+
+## Share by email
+Run `supabase/share.sql` once in the Supabase SQL editor. It adds `share_report(...)`, which builds a clean read-only email (single analysis or comparison) on the server and queues it in `email_outbox`; the existing Worker cron sends it. Limits: 5 recipients per share, 30 emails per person per day. Portal side: `portal/share.js`.

@@ -1,0 +1,156 @@
+-- Share an analysis or a comparison by email.
+-- The browser sends only structured report data; the email HTML is built here with every value escaped,
+-- so nobody can push arbitrary HTML out of our sending domain. Safe to re-run.
+
+create or replace function public.p2p_score_color(s numeric) returns text language sql immutable as $$
+  select case when s >= 75 then '#1F9D74' when s >= 50 then '#E0A21B' else '#D9534F' end
+$$;
+create or replace function public.p2p_score_label(s numeric) returns text language sql immutable as $$
+  select case when s >= 85 then 'Strongest' when s >= 70 then 'Strong' when s >= 50 then 'Mixed' else 'Needs attention' end
+$$;
+
+-- one horizontal bar as an email-safe table
+create or replace function public.p2p_bar(p_score numeric, p_color text) returns text language sql immutable as $$
+  select '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr>'
+    || '<td style="background:#ECE5D9;border-radius:6px;height:10px;font-size:0;line-height:0"><table role="presentation" width="' || greatest(2, least(100, round(coalesce(p_score, 0)))) || '%" cellpadding="0" cellspacing="0"><tr><td style="background:' || p_color || ';border-radius:6px;height:10px;font-size:0;line-height:0">&nbsp;</td></tr></table></td></tr></table>'
+$$;
+
+create or replace function public.p2p_li(p_arr jsonb, p_color text) returns text language plpgsql immutable set search_path = public as $$
+declare r text := ''; v text; n int := 0;
+begin
+  if jsonb_typeof(p_arr) <> 'array' then return ''; end if;
+  for v in select left(value #>> '{}', 300) from jsonb_array_elements(p_arr) loop
+    n := n + 1; exit when n > 6;
+    r := r || '<tr><td width="18" valign="top" style="padding:3px 0;color:' || p_color || ';font-size:15px;line-height:20px">&bull;</td><td style="padding:3px 0;font-size:14px;line-height:20px;color:#3B3A37">' || public.p2p_esc(v) || '</td></tr>';
+  end loop;
+  return case when r = '' then '' else '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' || r || '</table>' end;
+end $$;
+
+create or replace function public.p2p_h(p_text text, p_color text default '#14161A') returns text language sql immutable as $$
+  select '<p style="margin:26px 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:' || p_color || '">' || public.p2p_esc(p_text) || '</p>'
+$$;
+
+create or replace function public.share_email_html(p_who text, p_note text, p_kind text, p_a jsonb, p_b jsonb) returns text
+language plpgsql immutable set search_path = public as $fn$
+declare
+  body text := ''; head text; sub text; a jsonb; asp jsonb; nm text; sc numeric; sa numeric; sb_ numeric;
+  names text[]; k text; aw int := 0; bw int := 0; verdict text; learn text := ''; ln int := 0; an text; bn text;
+begin
+  if p_kind = 'compare' then
+    an := coalesce(nullif(left(p_a ->> 'name', 80), ''), 'Business A'); bn := coalesce(nullif(left(p_b ->> 'name', 80), ''), 'Business B');
+    head := an || ' vs ' || bn;
+    sub := 'Side-by-side review comparison';
+    body := '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+      || '<td width="50%" valign="top" style="padding:0 6px 0 0"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">A</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(an) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || public.p2p_esc(coalesce(p_a ->> 'rating', '—')) || ' / 5 &middot; ' || public.p2p_esc(coalesce(p_a ->> 'review_count', '—')) || ' reviews</div></div></td>'
+      || '<td width="50%" valign="top" style="padding:0 0 0 6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">B</div><div style="font-size:16px;font-weight:bold;color:#14161A;margin-top:2px">' || public.p2p_esc(bn) || '</div><div style="font-size:13px;color:#5E5A54;margin-top:4px">' || public.p2p_esc(coalesce(p_b ->> 'rating', '—')) || ' / 5 &middot; ' || public.p2p_esc(coalesce(p_b ->> 'review_count', '—')) || ' reviews</div></div></td></tr></table>';
+
+    select array_agg(g.nme order by g.o) into names from (
+      select q.nme, min(q.o) as o from (
+        select left(value ->> 'name', 60) as nme, ord as o from jsonb_array_elements(case when jsonb_typeof(p_a -> 'aspects') = 'array' then p_a -> 'aspects' else '[]'::jsonb end) with ordinality as t(value, ord)
+        union all
+        select left(value ->> 'name', 60), 1000 + ord from jsonb_array_elements(case when jsonb_typeof(p_b -> 'aspects') = 'array' then p_b -> 'aspects' else '[]'::jsonb end) with ordinality as t(value, ord)) q
+      where q.nme is not null group by q.nme) g;
+    body := body || public.p2p_h('Aspect comparison');
+    foreach k in array coalesce(names, array[]::text[]) loop
+      ln := ln + 1; exit when ln > 12;
+      select nullif(value ->> 'score', '')::numeric into sa from jsonb_array_elements(case when jsonb_typeof(p_a -> 'aspects') = 'array' then p_a -> 'aspects' else '[]'::jsonb end) where left(value ->> 'name', 60) = k limit 1;
+      select nullif(value ->> 'score', '')::numeric into sb_ from jsonb_array_elements(case when jsonb_typeof(p_b -> 'aspects') = 'array' then p_b -> 'aspects' else '[]'::jsonb end) where left(value ->> 'name', 60) = k limit 1;
+      if sa is not null and sb_ is not null then
+        if sa - sb_ >= 12 then aw := aw + 1; if length(learn) < 400 and aw + bw <= 3 then learn := learn || public.p2p_esc(bn) || ' could take cues from ' || public.p2p_esc(an) || ' on ' || public.p2p_esc(lower(k)) || '. '; end if;
+        elsif sb_ - sa >= 12 then bw := bw + 1; if length(learn) < 400 and aw + bw <= 3 then learn := learn || public.p2p_esc(an) || ' could take cues from ' || public.p2p_esc(bn) || ' on ' || public.p2p_esc(lower(k)) || '. '; end if;
+        end if;
+      end if;
+      body := body || '<div style="margin:0 0 14px"><div style="font-size:14px;font-weight:bold;color:#14161A;margin-bottom:6px">' || public.p2p_esc(k) || '</div>'
+        || case when sa is not null then '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:5px"><tr><td width="22" style="font-size:12px;font-weight:bold;color:#C97A00">A</td><td>' || public.p2p_bar(sa, '#E8943A') || '</td><td width="34" align="right" style="font-size:13px;font-weight:bold;color:#14161A">' || round(sa) || '</td></tr></table>' else '' end
+        || case when sb_ is not null then '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="22" style="font-size:12px;font-weight:bold;color:#1F7A7A">B</td><td>' || public.p2p_bar(sb_, '#2E8F8F') || '</td><td width="34" align="right" style="font-size:13px;font-weight:bold;color:#14161A">' || round(sb_) || '</td></tr></table>' else '' end
+        || '</div>';
+      sa := null; sb_ := null;
+    end loop;
+
+    body := body || public.p2p_h('What guests love', '#0B6B54')
+      || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="50%" valign="top" style="padding-right:8px"><div style="font-size:13px;font-weight:bold;margin-bottom:4px">' || public.p2p_esc(an) || '</div>' || public.p2p_li(p_a -> 'likes', '#1F9D74') || '</td><td width="50%" valign="top" style="padding-left:8px"><div style="font-size:13px;font-weight:bold;margin-bottom:4px">' || public.p2p_esc(bn) || '</div>' || public.p2p_li(p_b -> 'likes', '#1F9D74') || '</td></tr></table>'
+      || public.p2p_h('Where each slips', '#B4442F')
+      || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td width="50%" valign="top" style="padding-right:8px"><div style="font-size:13px;font-weight:bold;margin-bottom:4px">' || public.p2p_esc(an) || '</div>' || public.p2p_li(p_a -> 'dislikes', '#D9534F') || '</td><td width="50%" valign="top" style="padding-left:8px"><div style="font-size:13px;font-weight:bold;margin-bottom:4px">' || public.p2p_esc(bn) || '</div>' || public.p2p_li(p_b -> 'dislikes', '#D9534F') || '</td></tr></table>';
+
+    verdict := case when aw > bw then '<b>' || public.p2p_esc(an) || '</b> comes out ahead, leading on ' || aw || ' aspect' || case when aw = 1 then '' else 's' end || ' vs ' || bw || ' for ' || public.p2p_esc(bn) || '.'
+                    when bw > aw then '<b>' || public.p2p_esc(bn) || '</b> comes out ahead, leading on ' || bw || ' aspect' || case when bw = 1 then '' else 's' end || ' vs ' || aw || ' for ' || public.p2p_esc(an) || '.'
+                    else public.p2p_esc(an) || ' and ' || public.p2p_esc(bn) || ' are closely matched overall, each leading in different areas.' end;
+    body := body || '<div style="margin-top:26px;background:#14161A;color:#F3EEE6;border-radius:14px;padding:16px 18px;font-size:14px;line-height:1.6"><div style="font-size:11px;letter-spacing:.12em;font-weight:bold;color:#F5B041;margin-bottom:6px">VERDICT</div>' || verdict || case when learn <> '' then '<br><br>' || learn else '' end || '</div>';
+  else
+    a := p_a;
+    head := coalesce(nullif(left(a ->> 'name', 80), ''), 'Business analysis');
+    sub := coalesce(nullif(left(a ->> 'address', 120), ''), 'Review analysis');
+    body := '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+      || '<td width="50%" style="padding-right:6px"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">RATING</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || public.p2p_esc(coalesce(a ->> 'rating', '—')) || '<span style="font-size:13px;color:#7A756C"> / 5</span></div></div></td>'
+      || '<td width="50%" style="padding-left:6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">REVIEW VOLUME</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || public.p2p_esc(coalesce(a ->> 'review_count', '—')) || '</div></div></td></tr></table>';
+    body := body || public.p2p_h('Aspect breakdown');
+    if jsonb_typeof(a -> 'aspects') = 'array' then
+      for asp in select value from jsonb_array_elements(a -> 'aspects') limit 12 loop
+        sc := nullif(asp ->> 'score', '')::numeric; continue when sc is null;
+        body := body || '<div style="margin:0 0 14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px"><tr><td style="font-size:14px;font-weight:bold;color:#14161A">' || public.p2p_esc(left(asp ->> 'name', 60)) || '</td><td align="right" style="font-size:12px;font-weight:bold;color:' || public.p2p_score_color(sc) || '">' || public.p2p_score_label(sc) || ' &middot; ' || round(sc) || '</td></tr></table>' || public.p2p_bar(sc, public.p2p_score_color(sc)) || '</div>';
+      end loop;
+    end if;
+    body := body || public.p2p_h('What guests love', '#0B6B54') || public.p2p_li(a -> 'likes', '#1F9D74')
+      || public.p2p_h('Where it slips', '#B4442F') || public.p2p_li(a -> 'dislikes', '#D9534F');
+    if jsonb_typeof(a -> 'suggestions') = 'array' then
+      body := body || public.p2p_h('Suggested next steps');
+      ln := 0;
+      for k in select left(value #>> '{}', 300) from jsonb_array_elements(a -> 'suggestions') limit 6 loop
+        ln := ln + 1;
+        body := body || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px"><tr><td width="34" valign="top"><div style="width:24px;height:24px;border-radius:12px;background:#E8943A;color:#fff;font-size:12px;font-weight:bold;line-height:24px;text-align:center">' || ln || '</div></td><td style="font-size:14px;line-height:21px;color:#3B3A37;padding-top:1px">' || public.p2p_esc(k) || '</td></tr></table>';
+      end loop;
+    end if;
+    if coalesce(a -> 'seasonal_outlook' ->> 'guidance', '') <> '' then
+      body := body || public.p2p_h('Trend outlook') || '<p style="margin:0;font-size:14px;line-height:21px;color:#3B3A37">' || public.p2p_esc(left(a -> 'seasonal_outlook' ->> 'guidance', 500)) || '</p>';
+    end if;
+  end if;
+
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Proof to Profit</title></head><body style="margin:0;padding:0;background:#F3EEE6">'
+    || '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#F3EEE6">' || public.p2p_esc(p_who) || ' shared a Proof to Profit report with you.</div>'
+    || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EEE6"><tr><td align="center" style="padding:24px 12px">'
+    || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFFFF;border-radius:20px;overflow:hidden;border:1px solid #E6DFD3;font-family:Arial,Helvetica,sans-serif">'
+    || '<tr><td style="background:#14161A;padding:22px 28px"><div style="font-size:12px;letter-spacing:.16em;font-weight:bold;color:#F5B041">PROOF TO PROFIT</div><div style="font-size:24px;line-height:30px;font-weight:bold;color:#FFFFFF;margin-top:8px">' || public.p2p_esc(head) || '</div><div style="font-size:13px;color:#B9B4AA;margin-top:4px">' || public.p2p_esc(sub) || '</div></td></tr>'
+    || '<tr><td style="padding:22px 28px 6px;font-size:14px;line-height:21px;color:#3B3A37"><b>' || public.p2p_esc(p_who) || '</b> shared this ' || case when p_kind = 'compare' then 'comparison' else 'analysis' end || ' with you.'
+    || case when coalesce(trim(p_note), '') <> '' then '<div style="margin-top:12px;background:#FAF6EE;border:1px solid #E6DFD3;border-radius:12px;padding:12px 14px;color:#5E5A54">&ldquo;' || public.p2p_esc(left(trim(p_note), 400)) || '&rdquo;</div>' else '' end
+    || '</td></tr>'
+    || '<tr><td style="padding:6px 28px 26px">' || body || '</td></tr>'
+    || '<tr><td style="background:#FAF6EE;border-top:1px solid #E6DFD3;padding:16px 28px;font-size:12px;line-height:18px;color:#7A756C">Scores and themes are AI estimates based on review patterns &mdash; a starting point, not an audit. Sent by Proof to Profit on behalf of ' || public.p2p_esc(p_who) || '. Replying to this message will not reach them; contact them directly.</td></tr>'
+    || '</table></td></tr></table></body></html>';
+end $fn$;
+
+-- Called from the portal. Up to 5 recipients, 30 recipient emails per day per person.
+create or replace function public.share_report(p_to text[], p_note text, p_kind text, p_a jsonb, p_b jsonb default null, p_copy boolean default false) returns json
+language plpgsql security definer set search_path = public as $$
+declare
+  me public.allowed_emails; who text; subj text; html text; addr text; clean text[] := array[]::text[]; used int; nm text; n int := 0;
+begin
+  me := public._p2p_me();
+  if me.email is null or auth.uid() is null then raise exception 'not allowed' using errcode = '42501'; end if;
+  if p_kind not in ('single', 'compare') or jsonb_typeof(p_a) <> 'object' or (p_kind = 'compare' and jsonb_typeof(p_b) <> 'object') then raise exception 'invalid report'; end if;
+  if length(p_a::text) > 60000 or length(coalesce(p_b::text, '')) > 60000 then raise exception 'report too large'; end if;
+  foreach addr in array coalesce(p_to, array[]::text[]) loop
+    addr := lower(trim(addr));
+    if addr = '' then continue; end if;
+    if addr !~ '^[a-z0-9._%+''-]+@[a-z0-9.-]+\.[a-z]{2,}$' or length(addr) > 120 then raise exception 'bad email: %', addr; end if;
+    if not (addr = any(clean)) then clean := clean || addr; end if;
+  end loop;
+  if array_length(clean, 1) is null then raise exception 'Add at least one email address'; end if;
+  if array_length(clean, 1) > 5 then raise exception 'You can share with up to 5 people at a time'; end if;
+  select count(*) into used from public.email_outbox where user_id = auth.uid() and kind = 'share' and created_at > now() - interval '1 day';
+  if used + array_length(clean, 1) + case when p_copy then 1 else 0 end > 30 then raise exception 'Daily sharing limit reached. Try again tomorrow.'; end if;
+
+  select coalesce(nullif(trim(p.display_name), ''), split_part(me.email, '@', 1)) into who from public.profiles p where p.user_id = auth.uid();
+  who := coalesce(who, split_part(me.email, '@', 1));
+  nm := case when p_kind = 'compare' then coalesce(nullif(left(p_a ->> 'name', 60), ''), 'Business A') || ' vs ' || coalesce(nullif(left(p_b ->> 'name', 60), ''), 'Business B')
+             else coalesce(nullif(left(p_a ->> 'name', 80), ''), 'a business') end;
+  subj := who || ' shared ' || case when p_kind = 'compare' then 'a comparison: ' else 'an analysis: ' end || nm;
+  html := public.share_email_html(who, p_note, p_kind, p_a, p_b);
+  foreach addr in array clean loop
+    perform public.queue_email(auth.uid(), addr, 'share', subj, html); n := n + 1;
+  end loop;
+  if p_copy then perform public.queue_email(auth.uid(), me.email, 'share', 'Copy: ' || subj, html); n := n + 1; end if;
+  return json_build_object('queued', n);
+end $$;
+
+revoke all on function public.share_report(text[], text, text, jsonb, jsonb, boolean) from public, anon;
+grant execute on function public.share_report(text[], text, text, jsonb, jsonb, boolean) to authenticated;
