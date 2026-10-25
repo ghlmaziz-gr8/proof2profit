@@ -137,7 +137,7 @@ begin
   if array_length(clean, 1) is null then raise exception 'Add at least one email address'; end if;
   if array_length(clean, 1) > 5 then raise exception 'You can share with up to 5 people at a time'; end if;
   select count(*) into used from public.email_outbox where user_id = auth.uid() and kind = 'share' and created_at > now() - interval '1 day';
-  if used + array_length(clean, 1) + case when p_copy then 1 else 0 end > 30 then raise exception 'Daily sharing limit reached. Try again tomorrow.'; end if;
+  if used + array_length(clean, 1) + (p_copy)::int > 30 then raise exception 'Daily sharing limit reached. Try again tomorrow.'; end if;
 
   select coalesce(nullif(trim(p.display_name), ''), split_part(me.email, '@', 1)) into who from public.profiles p where p.user_id = auth.uid();
   who := coalesce(who, split_part(me.email, '@', 1));
