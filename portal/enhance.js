@@ -6,6 +6,19 @@
   var SVGNS = "http://www.w3.org/2000/svg";
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function explain(title, bodyHtml) {
+    var old = document.getElementById("enhEx"); if (old) old.remove();
+    var ov = h("div", "enh-ex"); ov.id = "enhEx";
+    var box = h("div", "enh-ex-box"); box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
+    var t = h("h3", "", ""); t.textContent = title;
+    var x = h("button", "enh-ex-x", "Got it"); x.type = "button";
+    box.appendChild(t); box.appendChild(h("div", "enh-ex-body", bodyHtml)); box.appendChild(x); ov.appendChild(box);
+    var prev = document.activeElement;
+    function close() { ov.remove(); document.removeEventListener("keydown", key); if (prev && prev.focus) try { prev.focus(); } catch (e) { } }
+    function key(e) { if (e.key === "Escape") close(); }
+    x.addEventListener("click", close); ov.addEventListener("click", function (e) { if (e.target === ov) close(); }); document.addEventListener("keydown", key);
+    document.body.appendChild(ov); x.focus();
+  }
   function h(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
   function scoreColor(s) { return s >= 75 ? "#1D9E75" : s >= 55 ? "#F69500" : "#C24A34"; }
@@ -69,6 +82,15 @@
     ".enh-contact{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}",
     ".enh-contact a,.enh-contact span{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border-radius:99px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);color:#fff;font:500 13px 'Inter',sans-serif;text-decoration:none;max-width:100%;overflow-wrap:anywhere;animation:enhRise .6s .3s cubic-bezier(.2,.8,.2,1) both}",
     ".enh-contact a:hover{background:rgba(255,180,56,.22);border-color:rgba(255,180,56,.5)}",
+    ".enh-tap{cursor:pointer;position:relative}.enh-tap:focus-visible{outline:2px solid #FFB438;outline-offset:3px}",
+    ".enh-kpi.enh-tap:hover{border-color:rgba(255,180,56,.6);background:rgba(255,255,255,.13)}.enh-ring.enh-tap:hover .ct span{color:#FFD35A}",
+    ".enh-i{position:absolute;top:5px;right:6px;width:15px;height:15px;border-radius:50%;border:1px solid rgba(255,255,255,.4);color:#d9d4ca;font:italic 600 10px/13px Georgia,serif;text-align:center;font-style:italic}",
+    ".enh-ring .enh-i{top:6px;right:6px;width:18px;height:18px;line-height:16px;font-size:12px}",
+    ".aspect.enh-tap:hover .a-label{text-decoration:underline}",
+    ".enh-ex{position:fixed;inset:0;z-index:99999;background:rgba(20,22,26,.55);display:flex;align-items:center;justify-content:center;padding:16px;animation:enhFade .2s}",
+    ".enh-ex-box{background:#fff;color:#14161A;border-radius:16px;max-width:440px;width:100%;max-height:85vh;overflow:auto;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:enhRise .3s cubic-bezier(.2,.8,.2,1)}",
+    ".enh-ex-box h3{margin:0 0 10px;font:700 18px 'Space Grotesk',sans-serif}.enh-ex-body p{margin:0 0 10px;font-size:14px;line-height:1.5}.enh-ex-body .ex-note{background:#FEF3E2;border-radius:10px;padding:10px 12px;font-size:13px;color:#7a4a10}",
+    ".enh-ex-x{width:100%;margin-top:6px}@keyframes enhFade{from{opacity:0}to{opacity:1}}",
     "@media (prefers-reduced-motion:reduce){.enh-sweep,.enh-ping,.enh-shine,.enh-ring-live:before,.enh-kpi,.enh-contact a,.enh-contact span,.enh-radar-data polygon{animation:none!important}.enh-sweep{display:none}}",
     /* trend */
     ".enh-trend path.enh-line{stroke-linecap:round;stroke-linejoin:round}",
@@ -415,8 +437,9 @@
 
       var aiRating = null;
       if (isNaN(rating) && avg != null) { aiRating = Math.max(1, Math.min(5, Math.round(avg / 20 * 10) / 10)); rating = aiRating; }
-      var themes = 0;
-      $$(":scope > .list-block", card).forEach(function (lb) { if (/love|slips/i.test(($(".list-title", lb) || {}).textContent || "")) themes += $$("li", lb).length; });
+      var themes = 0, nLove = 0, nSlip = 0;
+      $$(":scope > .list-block", card).forEach(function (lb) { var t = ($(".list-title", lb) || {}).textContent || ""; var n = $$("li", lb).length; if (/love/i.test(t)) { nLove = n; themes += n; } else if (/slips/i.test(t)) { nSlip = n; themes += n; } });
+      var aspInfo = $$(".aspect", card).map(function (a) { var nm = $(".aspect-top span", a); var bf = $(".bar-fill", a); return { name: nm ? nm.textContent.trim() : "", score: bf ? Math.round(parseFloat(bf.style.width) || 0) : 0, el: a }; });
 
       var hero = h("div", "enh-hero");
       var ring = h("div", "enh-ring" + (isNaN(rating) ? "" : " enh-ring-live"));
@@ -453,6 +476,29 @@
         txt.appendChild(nt);
       }
       hero.appendChild(txt);
+      var band = function (v) { return v >= 85 ? "Strongest (85+)" : v >= 70 ? "Strong (70–84)" : v >= 50 ? "Mixed (50–69)" : "Needs attention (under 50)"; };
+      var aspList = aspInfo.map(function (a) { return a.name + " " + a.score; }).join(", ");
+      var realR = aiRating == null && !isNaN(rating), realC = !revMissing;
+      var EX = {
+        rating: aiRating != null ? ["AI rating: " + aiRating.toFixed(1) + " out of 5",
+          "<p><b>What it means:</b> a quick one-number summary of how positive guest feedback is, on the familiar 5-star scale.</p><p><b>How it is calculated:</b> we take the average score of all " + aspInfo.length + " aspects (" + aspList + ") = <b>" + avg + "</b>, then divide by 20 to turn a 0–100 score into a 5-star one: " + avg + " ÷ 20 = <b>" + aiRating.toFixed(1) + "</b>.</p><p class='ex-note'>This is our AI's assessment of what guests say. It is not Google's star rating, which is the average of stars guests actually click, so the two can differ.</p>"]
+          : ["Star rating: " + rating.toFixed(1) + " out of 5", "<p><b>What it means:</b> the business's public star rating from live Google data.</p><p><b>How it is calculated:</b> Google averages the stars every reviewer gave. We show it as reported.</p>"],
+        reviews: useThemes ? ["Themes found: " + themes,
+          "<p><b>What it means:</b> how many separate points our AI pulled out of the feedback: <b>" + nLove + "</b> things guests love plus <b>" + nSlip + "</b> things where it slips = <b>" + themes + "</b>.</p><p><b>How to use it:</b> more themes means the feedback covers more ground. Each one is listed below in 'What guests love' and 'Where it slips'.</p><p class='ex-note'>This is not a review count. It does not say how many reviews exist or were read.</p>"]
+          : ["Reviews: " + revTxt, "<p><b>What it means:</b> the total number of public reviews for this business.</p><p><b>Why it matters:</b> a high rating from many reviews is far more reliable than the same rating from a few.</p>"],
+        avg: ["Average score: " + avg + " out of 100",
+          "<p><b>What it means:</b> overall how positive guests are across everything we looked at. Higher is better.</p><p><b>How it is calculated:</b> each aspect gets a 0–100 score from the feedback (" + aspList + "). The average score is the plain average of those, <b>" + avg + "</b>.</p><p><b>How to read it:</b> 85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention. You are in: <b>" + band(avg) + "</b>.</p>"],
+        aspects: ["Aspects: " + aspInfo.length,
+          "<p><b>What it means:</b> the topics guests talk about most for this kind of business. Here: <b>" + aspInfo.map(function (a) { return a.name; }).join(", ") + "</b>.</p><p><b>How each is scored:</b> 0–100, based on how positive the feedback on that topic is. Tap any bar below to see why it got its score.</p>"]
+      };
+      function openEx(k) { var e = EX[k]; if (e) explain(e[0], e[1]); }
+      function mk(el, k) { if (!el) return; el.classList.add("enh-tap"); el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", "What does this mean? " + el.textContent.trim()); el.addEventListener("click", function () { openEx(k); }); el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEx(k); } }); var i = h("i", "enh-i", "i"); el.appendChild(i); }
+      mk(ring, "rating"); mk(k1, "reviews"); if (typeof k2 !== "undefined" && k2) mk(k2, "avg"); if (typeof k3 !== "undefined" && k3) mk(k3, "aspects");
+      aspInfo.forEach(function (a) {
+        a.el.classList.add("enh-tap"); a.el.tabIndex = 0; a.el.setAttribute("role", "button");
+        var go = function () { explain(a.name + ": " + a.score + " out of 100 (" + band(a.score).split(" (")[0] + ")", "<p><b>What it means:</b> how positive guest feedback is about <b>" + a.name + "</b>. Higher is better.</p><p><b>How it is scored:</b> our AI reads the feedback on this topic and rates it 0–100. 85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention.</p><p><b>This one:</b> " + a.score + " = <b>" + band(a.score) + "</b>. It counts for " + Math.round(100 / aspInfo.length) + "% of the average score.</p>"); };
+        a.el.addEventListener("click", go); a.el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      });
       if (!RM) hero.insertBefore(h("div", "enh-shine"), hero.firstChild);
       stats.remove();
       card.insertBefore(hero, card.firstChild);
