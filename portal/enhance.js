@@ -19,6 +19,7 @@
     x.addEventListener("click", close); ov.addEventListener("click", function (e) { if (e.target === ov) close(); }); document.addEventListener("keydown", key);
     document.body.appendChild(ov); x.focus();
   }
+  window.__p2pExplain = explain;
   function h(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
   function scoreColor(s) { return s >= 75 ? "#1D9E75" : s >= 55 ? "#F69500" : "#C24A34"; }
