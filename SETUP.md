@@ -35,3 +35,13 @@ Only emails in `public.allowed_emails` can analyze or save. Add a user: Supabase
   is not available on the free quota; the app falls back to general knowledge and says so.
 - Gemini models change often. If analysis fails with a model error, change `GEMINI_MODEL` in the Worker settings.
 - Google OAuth consent screen must be **In production** for non-test users to reach the invite check.
+
+## Roles
+
+Run `supabase/roles.sql` once (done on the live project). Roles: super user (everything), admin, sales, business owner, team member.
+- Super user: invites anyone, changes roles, removes anyone (except themselves).
+- Admin: sees all invitations; invites and removes sales people and business owners.
+- Sales: invites business owners and sees only their own invitations.
+- Business owner: adds up to 5 team members (managers, marketing); sees only their own team.
+- Team member: no invite rights.
+The invite list is only reachable through role-checked database functions, so owners and members cannot read it.
