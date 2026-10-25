@@ -34,7 +34,7 @@ begin
   end if;
   insert into public.usage as u (user_id, day, kind, count)
   values (uid, (now() at time zone 'utc')::date, kind, 1)
-  on conflict (user_id, day, kind)
+  on conflict on constraint usage_pkey
   do update set count = u.count + 1 where u.count < daily_limit
   returning u.count into c;
   if c is null then

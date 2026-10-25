@@ -23,10 +23,25 @@
     var onSession = function (s) {
       session = s;
       if (s) {
-        gate.hidden = true;
-        chip.hidden = false;
-        chipEmail.textContent = (s.user && s.user.email) || "Signed in";
-        resolveReady();
+        sb.rpc("is_allowed").then(function (r) {
+          if (r.data === true) {
+            gate.hidden = true;
+            chip.hidden = false;
+            chipEmail.textContent = (s.user && s.user.email) || "Signed in";
+            resolveReady();
+          } else {
+            gate.hidden = false;
+            chip.hidden = true;
+            setGate((s.user && s.user.email ? s.user.email + " " : "This account ") + "isn't on the invite list yet. Proof to Profit is invite-only for now. Contact us to request access.", false);
+            if (!document.getElementById("gateOut")) {
+              var o = document.createElement("button");
+              o.id = "gateOut"; o.type = "button"; o.textContent = "Sign out";
+              o.className = gateBtn.className;
+              o.addEventListener("click", function () { sb.auth.signOut().then(function () { location.reload(); }); });
+              gateBtn.parentNode.appendChild(o);
+            }
+          }
+        });
       } else {
         gate.hidden = false;
         chip.hidden = true;
