@@ -1,0 +1,13 @@
+name = "p2p-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Comma-separated list of sites allowed to call this API
+ALLOWED_ORIGINS = "https://app.proof2profit.site,http://localhost:8788"
+GEMINI_MODEL = "gemini-2.5-flash"
+DAILY_ANALYSIS_LIMIT = "30"
+DAILY_SEARCH_LIMIT = "60"
+
+# Secrets (set with `npx wrangler secret put NAME`, never commit them):
+#   GEMINI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
