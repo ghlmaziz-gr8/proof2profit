@@ -275,6 +275,37 @@
       ".p2x-fields label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:#5E5A54}",
       ".p2x-fields input{padding:12px 13px;border:1.5px solid #E6DFD3;border-radius:12px;font:500 14px 'Instrument Sans',sans-serif;background:#fff;color:#14161A;min-width:0;transition:border-color .15s,box-shadow .15s}",
       ".p2x-fields input:focus{outline:0;border-color:#008CBB;box-shadow:0 0 0 3px rgba(0,140,187,.18)}",
+      ".p2x-fields textarea{padding:12px 13px;border:1.5px solid #E6DFD3;border-radius:12px;font:500 14px/1.45 'Instrument Sans',sans-serif;background:#fff;color:#14161A;min-width:0;resize:vertical;transition:border-color .15s,box-shadow .15s}",
+      ".p2x-fields textarea:focus{outline:0;border-color:#008CBB;box-shadow:0 0 0 3px rgba(0,140,187,.18)}",
+      ".p2x-note-field{grid-column:1/-1}",
+      ".p2x-rich:focus,.p2x-rich *:focus-visible:not(input):not(textarea):not(select){outline:none}",
+      ".p2x-tplrow{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}",
+      ".p2x-tpl{display:flex;gap:6px;flex-wrap:wrap;flex:1}",
+      ".p2x-tplb{border:1.5px solid #E6DFD3;background:#fff;color:#5E5A54;border-radius:99px;padding:7px 12px;font:600 12px 'Instrument Sans',sans-serif;cursor:pointer;min-height:34px;text-align:left}",
+      ".p2x-tplb:active{background:#FFF6E6;border-color:#F69500}",
+      ".p2x-cnt{font:600 11.5px 'Instrument Sans',sans-serif;color:#8a857d;white-space:nowrap;padding-top:8px}",
+      "@media (max-width:640px){",
+      " .p2x-rich{width:100vw!important;max-width:100vw!important;height:100dvh;max-height:100dvh!important;margin:0!important;border-radius:0!important;top:0;left:0}",
+      " .p2x-rich .p2x-body,.p2i .p2x-body{height:100dvh;max-height:100dvh!important;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}",
+      " .p2x-main{max-height:none!important;overflow:visible!important;padding:16px 16px 6px}",
+      " .p2x-listwrap{padding:8px 16px calc(24px + env(safe-area-inset-bottom))}",
+      " .p2x-hero{padding:56px 18px 16px}",
+      " .p2x-hero h3{font-size:22px!important}.p2x-hero p{font-size:12.5px}",
+      " .p2x-hero>div:nth-child(3){display:none}",
+      " .p2x-x{width:44px;height:44px;top:max(10px,env(safe-area-inset-top));right:10px;font-size:24px;background:rgba(255,255,255,.2)}",
+      " .p2x-roles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}",
+      " .p2x-rc{padding:11px 10px;min-height:76px}.p2x-rc span{font-size:11px}",
+      " .p2x-fields{grid-template-columns:minmax(0,1fr)}",
+      " .p2x-fields input,.p2x-fields textarea{font-size:16px!important;padding:14px 14px}",
+      " .p2x-fields input{min-height:52px}",
+      " .p2x-send{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom));z-index:6;min-height:58px;font-size:18px;box-shadow:0 14px 30px -10px rgba(246,149,0,.75),0 0 0 6px #FBF8F3}",
+      " .p2x-prev{font-size:12.5px}",
+      " .p2x-person{padding:10px}.p2x-person .p2x-row{width:100%;justify-content:flex-end}",
+      " .p2x-btn.sm{padding:10px 14px;min-height:40px}",
+      " .p2i-pad{padding:16px 16px calc(24px + env(safe-area-inset-bottom))}",
+      " .p2i-tab{padding:11px 16px;min-height:44px}",
+      " .p2i-chip{padding:9px 14px;min-height:40px}",
+      "}",
       ".p2x-prev{display:flex;gap:11px;align-items:center;background:#14161A;color:#F3EFE8;border-radius:14px;padding:11px 14px;font-size:13px;min-width:0}",
       ".p2x-prev .av{flex:0 0 34px;height:34px;border-radius:10px;background:#F69500;color:#14161A;font:800 13px/34px 'Bricolage Grotesque',sans-serif;text-align:center}",
       ".p2x-prev div{min-width:0;overflow-wrap:anywhere}.p2x-prev em{font-style:normal;color:#FFB438;font-weight:600}",
@@ -368,8 +399,28 @@
     }
     form.appendChild(el("p", { class: "p2x-sec" }, staff ? "2 · Who is it for?" : "Who are you adding?"));
     var fields = el("div", { class: "p2x-fields" });
-    var l1 = el("label", null, "Email address"); var em = el("input", { type: "email", placeholder: "name@company.com", required: "", maxlength: "120", autocomplete: "off" }); l1.appendChild(em);
-    var l2 = el("label", null, staff ? "Personal note (optional)" : "Job title (optional)"); var note = el("input", { type: "text", placeholder: staff ? "Welcome aboard!" : "Manager, Marketing…", maxlength: "60", autocomplete: "off" }); l2.appendChild(note);
+    var l1 = el("label", null, "Email address"); var em = el("input", { type: "email", inputmode: "email", placeholder: "name@company.com", required: "", maxlength: "120", autocomplete: "off", autocapitalize: "none", autocorrect: "off", spellcheck: "false", enterkeyhint: "next" }); l1.appendChild(em);
+    var l2 = el("label", { class: "p2x-note-field" }, staff ? "Personal message (optional)" : "Job title (optional)");
+    var note = staff
+      ? el("textarea", { rows: "3", placeholder: "Write a short, friendly welcome\u2026", maxlength: "200", autocomplete: "off", enterkeyhint: "done" })
+      : el("input", { type: "text", placeholder: "Manager, Marketing\u2026", maxlength: "60", autocomplete: "off", enterkeyhint: "done" });
+    l2.appendChild(note);
+    var count = function () { };
+    if (staff) {
+      var tpl = el("div", { class: "p2x-tpl" });
+      ["Welcome aboard!", "Excited to have you on the platform.", "Here is your access. Tell me what you think!"].forEach(function (t) {
+        var c = el("button", { type: "button", class: "p2x-tplb" }, t);
+        c.addEventListener("click", function () { note.value = t; count(); preview(); note.focus(); });
+        tpl.appendChild(c);
+      });
+      var cnt = el("span", { class: "p2x-cnt" }, "0/200");
+      count = function () { cnt.textContent = note.value.length + "/200"; };
+      note.addEventListener("input", function () { count(); preview(); });
+      var meta = el("div", { class: "p2x-tplrow" }); meta.appendChild(tpl); meta.appendChild(cnt);
+      l2.appendChild(meta);
+    }
+    em.addEventListener("focus", function () { setTimeout(function () { try { em.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 250); });
+    note.addEventListener("focus", function () { setTimeout(function () { try { note.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) { } }, 250); });
     fields.appendChild(l1); fields.appendChild(l2); form.appendChild(fields);
 
     var prev = el("div", { class: "p2x-prev" });
@@ -380,6 +431,7 @@
       ptx.appendChild(document.createTextNode(v ? v : "They"));
       ptx.appendChild(document.createTextNode(" will get an invitation as "));
       ptx.appendChild(el("em", null, ROLE_INFO[chosen][0])); ptx.appendChild(document.createTextNode(" with a button to sign in with Google."));
+      if (staff && note.value.trim()) { var q = el("div", null, "\u201c" + note.value.trim().slice(0, 90) + (note.value.trim().length > 90 ? "\u2026" : "") + "\u201d"); q.style.cssText = "margin-top:4px;color:#C9C4BA;font-style:italic"; ptx.appendChild(q); }
     }
     em.addEventListener("input", preview); preview();
 
@@ -411,7 +463,7 @@
         setTimeout((function (n) { return function () { if (n.parentNode) n.parentNode.removeChild(n); }; })(c), 1500);
       }
     }
-    again.addEventListener("click", function () { ok.classList.remove("show"); form.style.display = "flex"; em.value = ""; note.value = ""; preview(); em.focus(); });
+    again.addEventListener("click", function () { ok.classList.remove("show"); form.style.display = "flex"; em.value = ""; note.value = ""; count(); preview(); body.scrollTop = 0; em.focus(); });
 
     function render(items) {
       list.textContent = "";
@@ -475,6 +527,7 @@
     });
     refresh();
     if (adm.showModal) adm.showModal();
+    setTimeout(function () { body.scrollTop = 0; try { document.activeElement && document.activeElement.blur(); } catch (e) { } }, 30);
   }
 
   function openSettings() { buildSettings(); if (dlg.showModal) dlg.showModal(); }
