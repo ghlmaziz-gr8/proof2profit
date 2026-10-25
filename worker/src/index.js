@@ -57,6 +57,7 @@ function textOf(data) {
 }
 
 export default {
+  async scheduled(event, env, ctx) { ctx.waitUntil(drain(env)); },
   async fetch(request, env) {
     const h = cors(request, env);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
@@ -120,3 +121,28 @@ export default {
     return json({ error: "not_found" }, 404, h);
   },
 };
+
+// Sends queued emails (email_outbox in Supabase) through Resend. Runs on a cron trigger (every 5 minutes).
+// Needs secrets RESEND_API_KEY and OUTBOX_SECRET; does nothing until both exist.
+async function drain(env) {
+  if (!env.RESEND_API_KEY || !env.OUTBOX_SECRET) return;
+  const base = env.SUPABASE_URL + "/rest/v1/rpc/";
+  const hdr = { apikey: env.SUPABASE_ANON_KEY, Authorization: "Bearer " + env.SUPABASE_ANON_KEY, "Content-Type": "application/json" };
+  const r = await fetch(base + "claim_outbox", { method: "POST", headers: hdr, body: JSON.stringify({ p_secret: env.OUTBOX_SECRET, p_limit: 20 }) });
+  if (!r.ok) return;
+  const rows = await r.json();
+  const results = [];
+  for (const m of rows) {
+    try {
+      const s = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: env.MAIL_FROM || "Proof to Profit <noreply@proof2profit.site>", to: [m.to_email], subject: m.subject, html: m.html }),
+      });
+      results.push({ id: m.id, ok: s.ok, error: s.ok ? null : (await s.text()).slice(0, 300) });
+    } catch (e) {
+      results.push({ id: m.id, ok: false, error: String(e).slice(0, 300) });
+    }
+  }
+  if (results.length) await fetch(base + "finish_outbox", { method: "POST", headers: hdr, body: JSON.stringify({ p_secret: env.OUTBOX_SECRET, p_results: results }) });
+}

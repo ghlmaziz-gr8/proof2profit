@@ -20,6 +20,12 @@ app.proof2profit.site (Cloudflare Pages project "p2p-portal": portal/ files)
 - **Supabase**: run `supabase/schema.sql`, then `supabase/invite_only.sql`. Enable Google under Authentication -> Providers.
   Add `https://app.proof2profit.site/` to Authentication -> URL Configuration -> Redirect URLs.
 
+## Notifications and email
+- In-app: `supabase/notifications.sql` (profiles, notifications bell, preferences, delete-my-data). UI in `portal/extras.js`.
+- Email: `supabase/email.sql` (outbox queue, triggers, weekly summary via pg_cron). The Worker's `scheduled()` handler (cron every 5 min)
+  claims queued emails and sends them through Resend. Worker secrets: `RESEND_API_KEY`, `OUTBOX_SECRET`; its SHA-256 hash is in `app_secrets`.
+- Resend domain proof2profit.site is verified with DNS records at GoDaddy (TXT `resend._domainkey`, CNAME `rsend`, CNAME `send`). Sender: noreply@proof2profit.site.
+
 ## Access (invite-only for now)
 Only emails in `public.allowed_emails` can analyze or save. Add a user: Supabase -> Table Editor -> allowed_emails -> Insert row
 (their Google email). Remove: delete the row. For paid access later, add/remove rows from a payment webhook.
