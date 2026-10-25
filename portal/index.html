@@ -777,6 +777,11 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
     throw new Error('NEEDS_INFO: ' + query);
   }
   parsed._grounded = !!groundingText;
+  // A star rating and review total are only shown when they came from real search results.
+  // Without them the AI is just recalling from memory, and a remembered number can be wrong.
+  const rt = Number(parsed.rating), rc = String(parsed.review_count == null ? '' : parsed.review_count).trim();
+  if(!parsed._grounded || !(rt > 0 && rt <= 5)) parsed.rating = null; else parsed.rating = Math.round(rt * 10) / 10;
+  if(!parsed._grounded || !/\d/.test(rc)) parsed.review_count = null;
   return parsed;
 }
 
