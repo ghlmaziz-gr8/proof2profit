@@ -449,6 +449,8 @@
 <script src="track.js"></script>
 <script src="insights.js"></script>
 <script src="share.js"></script>
+<script src="progress.js"></script>
+<script src="export.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
@@ -958,9 +960,11 @@ async function saveBusinessSnapshot(data){
     ts: Date.now(),
     rating: data.rating ?? null,
     avgScore,
+    review_count: data.review_count ?? null,
     aspects: data.aspects || [],
     likes: data.likes || [],
-    dislikes: data.dislikes || []
+    dislikes: data.dislikes || [],
+    suggestions: data.suggestions || []
   });
   if(history.length > 24) history.shift();
   const histOk = await storageSetJSON('reviewlens_hist_' + slug, history);
@@ -1050,9 +1054,7 @@ async function renderSavedDetail(slug){
     return;
   }
 
-  const snapRows = history.slice().reverse().map(h => `
-    <div class="snapshot-row"><span class="snapshot-date">${new Date(h.ts).toLocaleDateString('default',{month:'short',day:'numeric',year:'numeric'})}</span><span>avg ${h.avgScore ?? '—'} · ${h.rating ?? '—'}/5</span></div>
-  `).join('');
+  window.__p2pSaved = { biz, history };
 
   detailWrap.innerHTML = `
     <p class="back-link" id="backToList">‹ All businesses</p>
@@ -1062,12 +1064,18 @@ async function renderSavedDetail(slug){
       ${buildTrendLine(history)}
       ${computeBestAndDiff(history)}
       <button id="recheckBtn" style="width:100%;margin-top:14px;">Re-check now</button>
+      <div class="save-btn-row" style="margin-top:10px;"><button class="p2x-share-btn" type="button" data-export="saved" aria-haspopup="menu">⬇ Export history</button></div>
       <div class="list-block">
-        <p class="list-title">Check-in history</p>
-        ${snapRows}
+        <p class="list-title">Progress check</p>
+        <div id="p2pProgressMount"></div>
+      </div>
+      <div class="list-block">
+        <p class="list-title">Past assessments</p>
+        <div id="p2pHistoryMount"></div>
       </div>
     </div>
   `;
+  if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
   document.getElementById('recheckBtn').addEventListener('click', async () => {
     const recheckBtn = document.getElementById('recheckBtn');
@@ -1200,6 +1208,7 @@ function renderReport(data){
       <div class="save-btn-row">
         <button class="save-biz-btn" id="saveBizBtn">+ Save to My Businesses</button>
         <button class="p2x-share-btn" type="button" data-share="single">✉ Share by email</button>
+        <button class="p2x-share-btn" type="button" data-export="single" aria-haspopup="menu">⬇ Export</button>
       </div>
       <div id="emailCaptureWrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);">
         <p style="font-size:13px;margin:0 0 8px;">Want a confirmation email when you save a business?</p>
@@ -1224,6 +1233,15 @@ function renderReport(data){
   `;
   window.__p2pLast = { kind: 'single', a: data };
   setState('report');
+  if(window.__p2pProgress){
+    window.__p2pProgress.reportBanner(data, slugify, storageGetJSON).then(h => {
+      if(!h || !window.__p2pLast || window.__p2pLast.a !== data) return;
+      const anchor = reportEl.querySelector('.section-label');
+      if(!anchor) return;
+      anchor.insertAdjacentHTML('beforebegin', h);
+      window.__p2pProgress.animate(reportEl);
+    });
+  }
   lastAnalyzedBusiness = { name: data.name, address: data.address };
   document.getElementById('competitorBtn').addEventListener('click', findCompetitors);
   document.getElementById('analyticsBtn').addEventListener('click', openAnalytics);
@@ -1476,7 +1494,7 @@ function renderComparison(a, b){
       </div>
 
       <div class="verdict">${verdict}${learnHtml}</div>
-      <div class="save-btn-row" style="margin-top:14px;"><button class="p2x-share-btn" type="button" data-share="compare">✉ Share this comparison by email</button></div>
+      <div class="save-btn-row" style="margin-top:14px;"><button class="p2x-share-btn" type="button" data-share="compare">✉ Share this comparison by email</button><button class="p2x-share-btn" type="button" data-export="compare" aria-haspopup="menu">⬇ Export</button></div>
     </div>
   `;
   window.__p2pLast = { kind: 'compare', a: a, b: b };

@@ -148,7 +148,7 @@
   }
 
   document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest(".p2x-share-btn");
+    var b = e.target.closest && e.target.closest("[data-share]");
     if (b) build();
   });
   window.__p2pShare = { open: build };
