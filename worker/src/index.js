@@ -309,7 +309,6 @@ async function socialAssess(env, input) {
     tools: [{ google_search: {} }],
     generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
   });
-  if (g1.status === 429) throw { code: "rate_limited" };
   const research = g1.status === 200 ? textOf(g1.data).trim() : "";
   const chunks = g1.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   const sources = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 4);
