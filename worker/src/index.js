@@ -1,8 +1,6 @@
 // Proof to Profit API: holds the Gemini key, checks the signed-in Supabase user,
 // enforces daily limits, and returns results to the portal.
 
-const GEMINI = "https://generativelanguage.googleapis.com/v1beta/models/";
-
 function cors(request, env) {
   const origin = request.headers.get("Origin") || "";
   const allowed = (env.ALLOWED_ORIGINS || "").split(",").map((s) => s.trim());
@@ -40,15 +38,122 @@ async function bump(env, token, kind, limit) {
   return { auth: true, allowed: !!data.allowed, used: data.used };
 }
 
-async function gemini(env, body) {
-  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
-  const r = await fetch(`${GEMINI}${model}:generateContent`, {
+// ---------- AI engine layer ----------
+// One place decides which AI engine answers. Admins pick it in the portal (stored in Supabase, key encrypted here).
+// To support a new vendor: add a line to PROVIDERS. Anything that speaks the OpenAI chat format works through "custom".
+const PROVIDERS = {
+  gemini: { label: "Google Gemini", kind: "gemini", base: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash", models: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"] },
+  openai: { label: "OpenAI", kind: "openai", base: "https://api.openai.com/v1", model: "gpt-4o-mini", models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"] },
+  anthropic: { label: "Anthropic Claude", kind: "anthropic", base: "https://api.anthropic.com/v1", model: "claude-haiku-5-5", models: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"] },
+  mistral: { label: "Mistral", kind: "openai", base: "https://api.mistral.ai/v1", model: "mistral-small-latest", models: ["mistral-small-latest", "mistral-large-latest"] },
+  groq: { label: "Groq", kind: "openai", base: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", models: ["llama-3.3-70b-versatile"] },
+  deepseek: { label: "DeepSeek", kind: "openai", base: "https://api.deepseek.com/v1", model: "deepseek-chat", models: ["deepseek-chat"] },
+  xai: { label: "xAI Grok", kind: "openai", base: "https://api.x.ai/v1", model: "grok-3-mini", models: ["grok-3-mini"] },
+  perplexity: { label: "Perplexity", kind: "openai", base: "https://api.perplexity.ai", model: "sonar", models: ["sonar"] },
+  openrouter: { label: "OpenRouter", kind: "openai", base: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini", models: ["openai/gpt-4o-mini", "google/gemini-2.5-flash"] },
+  custom: { label: "Custom (any compatible API)", kind: "openai", base: "", model: "", models: [], custom: true },
+};
+function publicProviders() {
+  return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, kind: p.kind, base: p.base, model: p.model, models: p.models, custom: !!p.custom }));
+}
+function validBase(u) {
+  try {
+    const x = new URL(u);
+    const h = x.hostname.toLowerCase();
+    if (x.protocol !== "https:" || !h.includes(".") || /^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(":") || /(^|\.)(local|localhost|internal|lan)$/.test(h)) return null;
+    return x.origin + x.pathname.replace(/\/+$/, "");
+  } catch (e) { return null; }
+}
+const b64 = (u8) => btoa(String.fromCharCode(...u8));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+async function aesKey(env) {
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("p2p-ai-config:" + (env.OUTBOX_SECRET || "")));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+async function encKey(env, plain) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(env), new TextEncoder().encode(plain)));
+  return b64(iv) + "." + b64(ct);
+}
+async function decKey(env, enc) {
+  const [i, c] = String(enc).split(".");
+  return new TextDecoder("utf-8").decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(i) }, await aesKey(env), unb64(c)));
+}
+async function sbRpc(env, fn, args, token) {
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-    body: JSON.stringify(body),
+    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token || env.SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(args || {}),
   });
-  const data = await r.json().catch(() => ({}));
-  return { status: r.status, data };
+  const data = await r.json().catch(() => null);
+  return { status: r.status, ok: r.ok, data };
+}
+function defaultEngine(env) {
+  const p = PROVIDERS.gemini;
+  return { provider: "gemini", kind: "gemini", base: p.base, model: env.GEMINI_MODEL || p.model, key: env.GEMINI_API_KEY, label: p.label, source: "default", grounding: true };
+}
+let engineCache = { at: 0, eng: null };
+async function activeEngine(env) {
+  if (engineCache.eng && Date.now() - engineCache.at < 60000) return engineCache.eng;
+  let eng = defaultEngine(env);
+  try {
+    if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
+      const r = await sbRpc(env, "ai_config_get", { p_secret: env.OUTBOX_SECRET });
+      const c = r.ok ? r.data : null;
+      if (c && PROVIDERS[c.provider]) {
+        const p = PROVIDERS[c.provider];
+        const key = c.key_enc ? await decKey(env, c.key_enc) : c.kind === "gemini" ? env.GEMINI_API_KEY : null;
+        const base = p.custom ? validBase(c.base_url) : p.base;
+        if (key && base && c.model) eng = { provider: c.provider, kind: c.kind, base, model: c.model, key, label: p.label, source: "saved", grounding: c.kind === "gemini" };
+      }
+    }
+  } catch (e) { /* fall back to the default engine so the app keeps working */ }
+  engineCache = { at: Date.now(), eng };
+  return eng;
+}
+function errText(data, raw) {
+  const e = data && (data.error || data.message);
+  return String((e && (e.message || e)) || raw || "AI request failed").slice(0, 300);
+}
+// One call to the chosen engine. Returns { status, text, truncated, chunks, error }.
+async function runAI(env, eng, o) {
+  const { prompt, json = true, maxTokens = 4096, temperature = 0.4, search = false } = o;
+  let url, headers, body, read;
+  if (eng.kind === "gemini") {
+    url = `${eng.base}/models/${eng.model}:generateContent`;
+    headers = { "Content-Type": "application/json", "x-goog-api-key": eng.key };
+    body = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature, maxOutputTokens: maxTokens } };
+    if (json && !search) body.generationConfig.responseMimeType = "application/json";
+    if (search) body.tools = [{ google_search: {} }];
+    read = (d) => ({ text: textOf(d), truncated: d?.candidates?.[0]?.finishReason === "MAX_TOKENS", chunks: d?.candidates?.[0]?.groundingMetadata?.groundingChunks || [] });
+  } else if (eng.kind === "anthropic") {
+    url = `${eng.base}/messages`;
+    headers = { "Content-Type": "application/json", "x-api-key": eng.key, "anthropic-version": "2023-06-01" };
+    body = { model: eng.model, max_tokens: maxTokens, temperature, messages: [{ role: "user", content: prompt }] };
+    read = (d) => ({ text: (d.content || []).map((p) => p.text || "").join(""), truncated: d.stop_reason === "max_tokens", chunks: [] });
+  } else {
+    url = `${eng.base}/chat/completions`;
+    headers = { "Content-Type": "application/json", Authorization: `Bearer ${eng.key}` };
+    body = { model: eng.model, messages: [{ role: "user", content: prompt }], temperature };
+    body[eng.provider === "openai" ? "max_completion_tokens" : "max_tokens"] = maxTokens;
+    if (json) body.response_format = { type: "json_object" };
+    read = (d) => ({ text: d?.choices?.[0]?.message?.content || "", truncated: d?.choices?.[0]?.finish_reason === "length", chunks: [] });
+  }
+  const send = async (b) => {
+    const r = await fetch(url, { method: "POST", headers, body: JSON.stringify(b) });
+    const raw = await r.text();
+    let d = null; try { d = JSON.parse(raw); } catch (e) { /* not JSON */ }
+    return { r, d, raw };
+  };
+  let x = await send(body);
+  if (x.r.status === 400 && eng.kind !== "gemini") {
+    // Some models refuse optional settings (temperature, JSON mode). Retry once with the plain request.
+    const b2 = { ...body }; delete b2.temperature; delete b2.response_format;
+    x = await send(b2);
+  }
+  if (!x.r.ok) return { status: x.r.status, text: "", error: errText(x.d, x.raw) };
+  const out = read(x.d || {});
+  return { status: 200, ...out };
 }
 
 function textOf(data) {
@@ -306,16 +411,13 @@ async function socialAssess(env, input, hints) {
   let direct = null;
   try { direct = await socialAudit(input); } catch (e) { direct = null; }
   const who = `${t.platform} profile @${t.handle} (${t.url})`;
-  const g1 = await gemini(env, {
-    contents: [{ role: "user", parts: [{ text: `Find what is publicly known about the ${who}. Report only what current web sources show: approximate follower count, how often it posts, typical likes/comments/views per post, content themes, recent activity, collaborations or press, and any signs the account is inactive. Give figures only when a source states them. If you find almost nothing, say so plainly.` }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
-  });
-  const research = g1.status === 200 ? textOf(g1.data).trim() : "";
-  const chunks = g1.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  const eng = await activeEngine(env);
+  const g1 = eng.grounding ? await runAI(env, eng, { prompt: `Find what is publicly known about the ${who}. Report only what current web sources show: approximate follower count, how often it posts, typical likes/comments/views per post, content themes, recent activity, collaborations or press, and any signs the account is inactive. Give figures only when a source states them. If you find almost nothing, say so plainly.`, search: true, json: false, maxTokens: 1500, temperature: 0.2 }) : { status: 0, text: "", chunks: [] };
+  const research = g1.status === 200 ? String(g1.text || "").trim() : "";
+  const chunks = g1.chunks || [];
   const sources = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 4);
   const haveDirect = !!(direct && direct.found);
-  if (!haveDirect && hf == null && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.data?.error?.message ? ": " + String(g1.data.error.message).slice(0, 160) : "") };
+  if (!haveDirect && hf == null && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.error ? ": " + String(g1.error).slice(0, 160) : "") };
   const owner = (hf != null || hl != null) ? ` Stated by the account owner (unverified): ${hf != null ? "followers " + hf : ""}${hf != null && hl != null ? ", " : ""}${hl != null ? "average likes per post " + hl : ""}.` : "";
   const facts = owner + " " + (direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.");
   const prompt = `Respond with ONLY a single JSON object, no markdown. Never put a literal double-quote inside a string value.
@@ -329,17 +431,17 @@ Web research: ${research || "nothing found"}
 Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unverified. Never invent follower counts, engagement figures or posts. If evidence is thin, say so, lower confidence and give a cautious score. Engagement benchmarks are rough industry rules of thumb.
 
 {"score":0-100 integer,"confidence":"high|medium|low","followers":number or null,"engagement":"one sentence on how engaged the audience looks and why","posting":"one sentence on posting consistency","score_reason":"2 sentences explaining how the score was reached and what it is based on","headline":"one sentence verdict","strengths":["2-3 items"],"gaps":["2-3 items"],"content_ideas":["3 specific post ideas for this kind of business"],"posting_plan":"one sentence weekly rhythm","evidence_note":"one sentence on what was and was not available"}`;
-  const g2 = await gemini(env, { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500, responseMimeType: "application/json" } });
+  const g2 = await runAI(env, eng, { prompt, json: true, maxTokens: 2500, temperature: 0.3 });
   if (g2.status === 429) throw { code: "rate_limited" };
-  if (g2.status !== 200) throw { code: "ai_error", message: g2.data?.error?.message || "AI request failed" };
-  const r = parseJsonLoose(textOf(g2.data));
+  if (g2.status !== 200) throw { code: "ai_error", message: g2.error || "AI request failed" };
+  const r = parseJsonLoose(g2.text);
   if (!r || typeof r.headline !== "string") throw { code: "ai_error", message: "unreadable AI answer" };
   r.score = Math.max(0, Math.min(100, Math.round(Number(r.score) || 0)));
   if (!["high", "medium", "low"].includes(r.confidence)) r.confidence = "low";
   if (direct && direct.found && Number.isFinite(direct.followers)) r.followers = direct.followers;
   else if (hf != null) r.followers = hf;
   else if (!Number.isFinite(Number(r.followers))) r.followers = null;
-  return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, ts: Date.now() };
+  return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, engine: eng.label + " · " + eng.model, ts: Date.now() };
 }
 
 export { seoAudit, socialAudit, socialTarget, readSocial, socialAssess };
@@ -370,14 +472,11 @@ export default {
       if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
       if (u.error) return json({ error: "usage_check_failed" }, 502, h);
       if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
-      const g = await gemini(env, {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 4096, responseMimeType: "application/json" },
-      });
+      const eng = await activeEngine(env);
+      const g = await runAI(env, eng, { prompt, json: true, maxTokens: 4096, temperature: 0.4 });
       if (g.status === 429) return json({ error: "rate_limited" }, 429, h);
-      if (g.status !== 200) return json({ error: "ai_error", message: g.data?.error?.message || "AI request failed" }, 502, h);
-      const cand = g.data?.candidates?.[0];
-      return json({ text: textOf(g.data), truncated: cand?.finishReason === "MAX_TOKENS" }, 200, h);
+      if (g.status !== 200) return json({ error: "ai_error", message: g.error || "AI request failed" }, 502, h);
+      return json({ text: g.text, truncated: !!g.truncated, engine: eng.label + " · " + eng.model }, 200, h);
     }
 
     if (path === "/search") {
@@ -389,14 +488,12 @@ export default {
       const prompt =
         `${String(body.objective || "").slice(0, 600)}\n\nSearch for: ${queries.join(" | ")}\n\n` +
         "Summarise only what current web sources actually say: rating, review themes (praise and complaints), hours, menu or services, location. Be specific and factual. If you find nothing reliable, say so.";
-      const g = await gemini(env, {
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
-      });
+      const eng = await activeEngine(env);
+      if (!eng.grounding) return json({ payload: { results: [] } }, 200, h);
+      const g = await runAI(env, eng, { prompt, search: true, json: false, maxTokens: 1500, temperature: 0.2 });
       if (g.status !== 200) return json({ payload: { results: [] } }, 200, h);
-      const text = textOf(g.data).trim();
-      const chunks = g.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const text = String(g.text || "").trim();
+      const chunks = g.chunks || [];
       if (!text || !chunks.length) return json({ payload: { results: [] } }, 200, h);
       const titles = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 5).join(", ");
       return json(
@@ -417,6 +514,64 @@ export default {
         const code = e && e.code ? e.code : "audit_failed";
         return json({ error: code, message: (e && e.message) || "" }, code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
       }
+    }
+
+    if (path.startsWith("/admin/ai/")) {
+      // Only admins and super users. The database function does the role check with the caller's own token.
+      const who = await sbRpc(env, "ai_config_info", {}, token);
+      if (who.status === 401) return json({ error: "not_signed_in" }, 401, h);
+      if (!who.ok) return json({ error: "forbidden", message: "Only admins can change the AI engine." }, 403, h);
+      const saved = who.data || {};
+      const email = (() => { try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch (e) { return ""; } })();
+      const pick = async () => {
+        const p = PROVIDERS[String(body.provider || "")];
+        if (!p) return { error: "bad_config", message: "Pick an engine from the list." };
+        const model = String(body.model || "").trim().slice(0, 120);
+        if (!model || /[\s"'<>]/.test(model)) return { error: "bad_config", message: "Enter a model name, like " + (p.model || "gpt-4o-mini") + "." };
+        let base = p.base;
+        if (p.custom) { base = validBase(String(body.base_url || "").trim()); if (!base) return { error: "bad_config", message: "Enter the engine's https address, like https://api.example.com/v1." }; }
+        const kind = p.custom && ["openai", "anthropic", "gemini"].includes(body.kind) ? body.kind : p.kind;
+        const typed = String(body.api_key || "").trim();
+        const keepable = saved.configured && saved.provider === body.provider && saved.has_key && (!p.custom || saved.base_url === base);
+        let key = typed || null;
+        if (!key && keepable) key = "__keep__";
+        if (!key && kind === "gemini") key = "__env__";
+        if (!key) return { error: "key_required", message: "Paste this engine's API key." };
+        return { p, id: body.provider, kind, base, model, key, typed };
+      };
+      if (path === "/admin/ai/info") {
+        const eng = await activeEngine(env);
+        return json({ current: saved, active: { provider: eng.provider, label: eng.label, model: eng.model, source: eng.source, grounding: eng.grounding }, providers: publicProviders(), defaultModel: env.GEMINI_MODEL || PROVIDERS.gemini.model }, 200, h);
+      }
+      if (path === "/admin/ai/reset") {
+        const r = await sbRpc(env, "ai_config_clear", { p_secret: env.OUTBOX_SECRET || "", p_by: email });
+        engineCache = { at: 0, eng: null };
+        if (!r.ok) return json({ error: "audit_failed", message: "Could not reset." }, 502, h);
+        return json({ ok: true }, 200, h);
+      }
+      const c = await pick();
+      if (c.error) return json({ error: c.error, message: c.message }, 400, h);
+      if (path === "/admin/ai/test") {
+        let key = c.key;
+        if (key === "__env__") key = env.GEMINI_API_KEY;
+        else if (key === "__keep__") { const cur = await sbRpc(env, "ai_config_get", { p_secret: env.OUTBOX_SECRET || "" }); try { key = await decKey(env, cur.data.key_enc); } catch (e) { key = null; } }
+        if (!key) return json({ ok: false, error: "No key available to test with." }, 200, h);
+        const t0 = Date.now();
+        const r = await runAI(env, { provider: c.id, kind: c.kind, base: c.base, model: c.model, key }, { prompt: 'Reply with only this JSON: {"ok":true,"engine":"say your model name"}', json: true, maxTokens: 60, temperature: 0 });
+        if (r.status !== 200) return json({ ok: false, status: r.status, error: r.error || "The engine did not accept the request." }, 200, h);
+        return json({ ok: true, ms: Date.now() - t0, sample: String(r.text || "").slice(0, 160) }, 200, h);
+      }
+      if (path === "/admin/ai/save") {
+        if (!env.OUTBOX_SECRET) return json({ error: "audit_failed", message: "The Worker is missing its OUTBOX_SECRET." }, 500, h);
+        const keep = c.key === "__keep__", noKey = c.key === "__env__";
+        const enc = keep || noKey ? null : await encKey(env, c.key);
+        const last4 = keep || noKey ? null : c.key.slice(-4);
+        const r = await sbRpc(env, "ai_config_put", { p_secret: env.OUTBOX_SECRET, p_provider: c.id, p_kind: c.kind, p_base_url: c.p.custom ? c.base : null, p_model: c.model, p_key_enc: enc, p_key_last4: last4, p_keep_key: keep, p_by: email });
+        engineCache = { at: 0, eng: null };
+        if (!r.ok) return json({ error: "audit_failed", message: "Could not save. Run supabase/ai_config.sql first." }, 502, h);
+        return json({ ok: true }, 200, h);
+      }
+      return json({ error: "not_found" }, 404, h);
     }
 
     if (path === "/social-assess") {

@@ -54,3 +54,11 @@ Run `supabase/share.sql` once in the Supabase SQL editor. It adds `share_report(
 
 ## Social profile reader (`/social`)
 The Worker route `/social` reads public profile stats where a platform allows it (TikTok works; Instagram and Facebook block Cloudflare, YouTube and X show no stats). Anything blocked falls back to numbers typed in the portal. Optional variable: `DAILY_SOCIAL_LIMIT` (default 30 per user per day).
+
+## Choosing the AI engine (admins)
+1. Run `supabase/ai_config.sql` once in the Supabase SQL editor.
+2. Update the Worker with the latest `worker/src/index.js` (it needs the existing `OUTBOX_SECRET` secret, which also encrypts the saved key).
+3. Sign in as an admin or super user, open your profile, tap **AI engine**, pick a provider, type the model name, paste the API key, tap **Test**, then **Save**.
+
+Providers built in: Google Gemini, OpenAI, Anthropic Claude, Mistral, Groq, DeepSeek, xAI Grok, Perplexity, OpenRouter, and **Custom** (any https address that speaks the OpenAI, Anthropic or Gemini format). To add a vendor permanently, add one line to `PROVIDERS` in the Worker. Model names are free text, so new models need no update.
+The key is encrypted in the Worker and stored as ciphertext; browsers never receive it. Web-search lookups (review search, social research) work only with Gemini; other engines skip them. "Use platform default" returns to the Gemini key set as a Worker secret.

@@ -83,7 +83,7 @@ window.__p2pPruneMonthly = function (arr, max) {
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (r.ok) return d;
-        var code = /^(rate_limited|prompt_too_large|bad_url|blocked_host|unreachable|not_found|not_html|audit_failed|unsupported_platform|no_data)$/.test(d.error) ? d.error : "error";
+        var code = /^(rate_limited|prompt_too_large|bad_url|blocked_host|unreachable|not_found|not_html|audit_failed|unsupported_platform|no_data|forbidden|key_required|bad_config)$/.test(d.error) ? d.error : "error";
         var e = { code: code, message: d.message || d.error || "Request failed" };
         throw e;
       });

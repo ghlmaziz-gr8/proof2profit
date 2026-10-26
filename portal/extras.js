@@ -147,6 +147,9 @@
         var hb = el("button", { class: "p2x-btn ghost", type: "button" }, "Behavior & heat map");
         hb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("behavior"); });
         body.appendChild(hb);
+        var eb = el("button", { class: "p2x-btn ghost", type: "button" }, "AI engine");
+        eb.addEventListener("click", function () { dlg.close(); if (window.__p2pEngine) window.__p2pEngine.open(); });
+        body.appendChild(eb);
       }
     }
     function field(label, key, ph) {
