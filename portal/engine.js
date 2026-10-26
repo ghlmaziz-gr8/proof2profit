@@ -15,14 +15,15 @@
     body.appendChild(el("p", { class: "p2x-note" }, "Your assessments (review analysis, forecast, SEO plan, social report) run on the engine you pick here, using your own API key. Each result shows which engine wrote it."));
     var now = el("p", { class: "p2x-note", style: "background:#f9fafb;border-radius:10px;padding:10px 12px" });
     now.appendChild(el("b", null, "In use now: "));
-    now.appendChild(document.createTextNode((act.label || "Google Gemini") + " · " + (act.model || "") + (act.source === "default" ? " (platform default)" : act.source === "org" ? " (organisation default)" : " (your own)")));
+    if (act.missing) { now.style.background = "#fff7ed"; now.appendChild(el("b", null, "No AI key yet. ")); now.appendChild(document.createTextNode("Pick an engine below and paste your own API key to run assessments.")); }
+    else now.appendChild(document.createTextNode((act.label || "Google Gemini") + " · " + (act.model || "") + (act.source === "default" ? " (platform default)" : act.source === "org" ? " (organisation default)" : " (your own)")));
     body.appendChild(now);
     // Daily usage per engine, against the daily limit an admin has set for it.
     var U = S.usage;
     if (U) {
       var ub = el("div", { class: "p2x-usage" });
       ub.appendChild(el("b", null, "Daily usage"));
-      ub.appendChild(el("p", { class: "p2x-note", style: "margin:2px 0 8px" }, "Counts every AI call made through each engine, across the whole portal. Resets at midnight UTC."));
+      ub.appendChild(el("p", { class: "p2x-note", style: "margin:2px 0 8px" }, "Counts every AI call made through each engine by your team. Resets at midnight UTC."));
       var byE = {}; (U.today || []).forEach(function (r) { byE[r.engine] = r; });
       var engines = [U.active].concat(Object.keys(byE)).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       var lims = {}; (U.limits || []).forEach(function (l) { lims[l.engine] = l.limit; });
@@ -108,7 +109,7 @@
     function payload() { return { scope: S.scope, provider: sel.value, model: model.value.trim(), base_url: base.value.trim(), kind: fmtSel.value, api_key: key.value.trim() }; }
     function busy(on, t) { [bt, bs, br].forEach(function (b) { b.disabled = on; }); if (t) { msg.style.color = "#6b7280"; msg.textContent = t; } }
     var row = el("div", { class: "p2x-row" });
-    var br = el("button", { class: "p2x-btn ghost", type: "button" }, S.scope === "org" ? "Remove default" : "Use the default");
+    var br = el("button", { class: "p2x-btn ghost", type: "button" }, S.scope === "org" ? "Remove default" : (inf.platform === false ? "Remove my key" : "Use the default"));
     var bt = el("button", { class: "p2x-btn ghost", type: "button" }, "Test");
     var bs = el("button", { class: "p2x-btn", type: "button" }, "Save");
     var bc = el("button", { class: "p2x-btn ghost", type: "button" }, "Close");
@@ -130,7 +131,7 @@
     });
     br.addEventListener("click", function () {
       busy(true, "Resetting…");
-      api("/ai/reset", {}).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = "Done. Using the default engine again."; } })
+      api("/ai/reset", {}).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = inf.platform === false ? "Done. Your key was removed." : "Done. Using the default engine again."; } })
         .catch(function (e) { busy(false); fail(e); });
     });
     dlg.appendChild(body);
@@ -156,7 +157,12 @@
     var ss = window.__p2p && window.__p2p.session && window.__p2p.session();
     if (!ss) { if (pill) pill.style.display = "none"; return; }
     api("/ai/usage", {}).then(function (U) {
-      if (!U || !U.active) { if (pill) pill.style.display = "none"; return; }
+      if (!U) { if (pill) pill.style.display = "none"; return; }
+      if (U.missing || !U.active) {
+        if (!pill) { pill = el("button", { type: "button", class: "p2x-pill" }); pill.addEventListener("click", function () { open(); }); document.body.appendChild(pill); }
+        pill.textContent = ""; var d0 = el("i"); d0.style.background = "#C24A34"; pill.appendChild(d0); pill.appendChild(document.createTextNode("AI key needed"));
+        pill.title = "Add your own AI key to run assessments. Click to set it up."; pill.style.display = "inline-flex"; return;
+      }
       var r = (U.today || []).filter(function (x) { return x.engine === U.active; })[0] || { calls: 0, errors: 0 };
       var lim = null; (U.limits || []).forEach(function (l) { if (l.engine === U.active) lim = l.limit; });
       var pct = lim ? r.calls / lim : 0, col = pct >= 1 ? "#C24A34" : pct >= .7 ? "#F69500" : "#1D9E75";

@@ -96,31 +96,38 @@ const engineCache = new Map();
 function emailOf(token) {
   try { return String(JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || "").toLowerCase(); } catch (e) { return ""; }
 }
-async function toEngine(env, c, source) {
+async function toEngine(env, c, source, allowEnv) {
   if (!c || !PROVIDERS[c.provider]) return null;
   const p = PROVIDERS[c.provider];
-  const key = c.key_enc ? await decKey(env, c.key_enc) : c.kind === "gemini" ? env.GEMINI_API_KEY : null;
+  const key = c.key_enc ? await decKey(env, c.key_enc) : (c.kind === "gemini" && allowEnv !== false) ? env.GEMINI_API_KEY : null;
   const base = p.custom ? validBase(c.base_url) : p.base;
   if (!key || !base || !c.model) return null;
   return { provider: c.provider, kind: c.kind, base, model: c.model, key, label: p.label, source, grounding: c.kind === "gemini" };
 }
-// The user's own engine first, then the organisation default, then the platform's Gemini key.
+// Proof to Profit people: their own engine, then the organisation default, then the platform's Gemini key.
+// Agency people: only their own engine and key. With none set they get a "missing" engine and no platform key is ever used.
 async function activeEngine(env, email) {
   const ck = email || "";
   const hit = engineCache.get(ck);
   if (hit && Date.now() - hit.at < 60000) return hit.eng;
   let eng = defaultEngine(env);
-  try {
-    if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
+  if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
+    const missing = { provider: "none", kind: "none", model: "", label: "No AI key", source: "none", grounding: false, missing: true };
+    try {
       const r = await sbRpc(env, "ai_engine_get", { p_secret: env.OUTBOX_SECRET, p_email: ck });
-      if (r.ok && r.data) {
+      if (r.ok && r.data && r.data.platform === true) {
         let e = null;
-        try { e = await toEngine(env, r.data.mine, "mine"); } catch (x) { e = null; }
-        if (!e) { try { e = await toEngine(env, r.data.org, "org"); } catch (x) { e = null; } }
+        try { e = await toEngine(env, r.data.mine, "mine", true); } catch (x) { e = null; }
+        if (!e) { try { e = await toEngine(env, r.data.org, "org", true); } catch (x) { e = null; } }
         if (e) eng = e;
-      }
-    }
-  } catch (e) { /* fall back to the default engine so the app keeps working */ }
+      } else if (r.ok && r.data) {
+        let e = null;
+        try { e = await toEngine(env, r.data.mine, "mine", false); } catch (x) { e = null; }
+        eng = e || missing;
+      } else { eng = missing; }
+    } catch (e) { eng = missing; }
+  }
+  eng.email = ck;
   engineCache.set(ck, { at: Date.now(), eng });
   if (engineCache.size > 500) engineCache.clear();
   return eng;
@@ -133,10 +140,11 @@ function errText(data, raw) {
 /** @returns {Promise<any>} */
 async function runAI(env, eng, o) {
   const { prompt, json = true, maxTokens = 4096, temperature = 0.4, search = false } = o;
+  if (eng.missing) return { status: 402, text: "", error: "Add your own AI key in My AI engine to run assessments." };
   // Count this call against the engine's daily usage, and stop when its daily limit (set by an admin) is reached.
   if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
     try {
-      const t = await sbRpc(env, "ai_usage_take", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model });
+      const t = await sbRpc(env, "ai_usage_take", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model, p_email: eng.email || null });
       if (t.ok && t.data && t.data.allowed === false) return { status: 429, text: "", error: "The daily limit set for this AI engine (" + t.data.limit + " calls) has been reached. It resets at midnight UTC." };
     } catch (e) { /* usage counting must never break the app */ }
   }
@@ -175,7 +183,7 @@ async function runAI(env, eng, o) {
     const b2 = { ...body }; delete b2.temperature; delete b2.response_format;
     x = await send(b2);
   }
-  if (!x.r.ok) { if (env.OUTBOX_SECRET && env.SUPABASE_URL) { try { await sbRpc(env, "ai_usage_fail", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model }); } catch (e) { /* ignore */ } } return { status: x.r.status, text: "", error: errText(x.d, x.raw) }; }
+  if (!x.r.ok) { if (env.OUTBOX_SECRET && env.SUPABASE_URL) { try { await sbRpc(env, "ai_usage_fail", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model, p_email: eng.email || null }); } catch (e) { /* ignore */ } } return { status: x.r.status, text: "", error: errText(x.d, x.raw) }; }
   const out = read(x.d || {});
   return { status: 200, ...out };
 }
@@ -621,6 +629,7 @@ export default {
       const eng = await activeEngine(env, emailOf(token));
       const g = await runAI(env, eng, { prompt, json: true, maxTokens: 4096, temperature: 0.4 });
       if (g.status === 429) return json({ error: "rate_limited" }, 429, h);
+      if (g.status === 402) return json({ error: "key_required", message: g.error }, 402, h);
       if (g.status !== 200) return json({ error: "ai_error", message: g.error || "AI request failed" }, 502, h);
       return json({ text: g.text, truncated: !!g.truncated, engine: eng.label + " · " + eng.model }, 200, h);
     }
@@ -674,7 +683,7 @@ export default {
         const r = await sbRpc(env, "ai_usage_info", {}, token);
         if (!r.ok || !r.data) return json({ error: "audit_failed", message: "Usage is not set up yet." }, 502, h);
         const eng = await activeEngine(env, me.email);
-        return json({ ...r.data, active: eng.provider + ":" + eng.model }, 200, h);
+        return json({ ...r.data, active: eng.missing ? null : eng.provider + ":" + eng.model, missing: !!eng.missing }, 200, h);
       }
       if (path === "/ai/limit") {
         const lim = body.limit === null || body.limit === "" || body.limit === undefined ? null : Math.max(0, Math.floor(Number(body.limit)));
@@ -696,13 +705,13 @@ export default {
         const keepable = mineOrOrg && mineOrOrg.provider === body.provider && mineOrOrg.has_key && (!p.custom || mineOrOrg.base_url === base);
         let key = typed || null;
         if (!key && keepable) key = "__keep__";
-        if (!key && kind === "gemini") key = "__env__";
+        if (!key && kind === "gemini" && me.platform) key = "__env__";
         if (!key) return { error: "key_required", message: "Paste this engine's API key." };
         return { p, id: body.provider, kind, base, model, key };
       };
       if (path === "/ai/info") {
         const eng = await activeEngine(env, me.email);
-        return json({ email: me.email, is_admin: !!me.is_admin, mine: me.mine, org: me.org, active: { provider: eng.provider, label: eng.label, model: eng.model, source: eng.source, grounding: eng.grounding }, providers: publicProviders(), defaultModel: env.GEMINI_MODEL || PROVIDERS.gemini.model }, 200, h);
+        return json({ email: me.email, is_admin: !!me.is_admin, mine: me.mine, org: me.org, platform: !!me.platform, active: { provider: eng.provider, label: eng.label, model: eng.model, source: eng.source, grounding: eng.grounding, missing: !!eng.missing }, providers: publicProviders(), defaultModel: env.GEMINI_MODEL || PROVIDERS.gemini.model }, 200, h);
       }
       if (path === "/ai/reset") {
         const r = await sbRpc(env, "ai_engine_clear", { p_secret: env.OUTBOX_SECRET || "", p_scope: scope });
@@ -721,7 +730,7 @@ export default {
         }
         if (!key) return json({ ok: false, error: "No key available to test with." }, 200, h);
         const t0 = Date.now();
-        const r = await runAI(env, { provider: c.id, kind: c.kind, base: c.base, model: c.model, key }, { prompt: 'Reply with only this JSON: {"ok":true,"engine":"say your model name"}', json: true, maxTokens: 60, temperature: 0 });
+        const r = await runAI(env, { provider: c.id, kind: c.kind, base: c.base, model: c.model, key, email: me.email }, { prompt: 'Reply with only this JSON: {"ok":true,"engine":"say your model name"}', json: true, maxTokens: 60, temperature: 0 });
         if (r.status !== 200) return json({ ok: false, status: r.status, error: r.error || "The engine did not accept the request." }, 200, h);
         return json({ ok: true, ms: Date.now() - t0, sample: String(r.text || "").slice(0, 160) }, 200, h);
       }
