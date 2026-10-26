@@ -110,9 +110,11 @@ async function activeEngine(env, email) {
   const ck = email || "";
   const hit = engineCache.get(ck);
   if (hit && Date.now() - hit.at < 60000) return hit.eng;
+  /** @type {any} */
   let eng = defaultEngine(env);
   if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
-    const missing = { provider: "none", kind: "none", model: "", label: "No AI key", source: "none", grounding: false, missing: true };
+    /** @type {any} */
+    const missing = { provider: "none", kind: "none", base: null, key: null, model: "", label: "No AI key", source: "none", grounding: false, missing: true };
     try {
       const r = await sbRpc(env, "ai_engine_get", { p_secret: env.OUTBOX_SECRET, p_email: ck });
       if (r.ok && r.data && r.data.platform === true) {
