@@ -62,6 +62,30 @@
       "<p class='ex-note'>An AI-assisted estimate to show where to focus, not an audit.</p>");
   }
 
+
+  // The hero's AI rating and average score follow the overall business health score, so the top and the card below always agree.
+  function syncHero(hero, c) {
+    try {
+      var sc = c.score, r2 = sc / 20, txt = r2.toFixed(2);
+      var kp = hero.querySelectorAll(".enh-kpi"), avgB = null;
+      Array.prototype.forEach.call(kp, function (k) { var s = k.querySelector("small"); if (s && /^avg score$/i.test(s.textContent.trim())) avgB = k.querySelector("b"); });
+      if (avgB) { avgB.dataset.count = sc; avgB.dataset.dec = 0; avgB.textContent = String(sc); }
+      var ex = hero.__ex, how = "";
+      if (hero.__isAI) {
+        var num = hero.querySelector(".enh-ring .ct span"), ring = hero.querySelector(".enh-ring");
+        if (num) { num.dataset.count = r2; num.dataset.dec = 2; num.textContent = txt; }
+        if (ring) { ring.style.setProperty("--off", (2 * Math.PI * 46) * (1 - Math.min(r2, 5) / 5)); }
+        var nt = hero.querySelector(".enh-nodata");
+        if (nt) nt.textContent = "AI rating = the overall business health score (" + sc + " out of 100) shown on the 5-star scale. It is our AI's assessment, not Google's star rating.";
+        how = c.parts.map(function (p) { return p.name + " " + p.score + " (" + p.share + "%)"; }).join(", ");
+        if (ex) ex.rating = ["AI rating: " + txt + " out of 5",
+          "<p><b>What it means:</b> the overall business health score on the familiar 5-star scale, so it always agrees with the score card below.</p><p><b>How it is calculated:</b> " + how + " combine to <b>" + sc + " out of 100</b>. Divide by 20 to get a 5-star number: <b>" + txt + "</b>.</p>" + (c.complete ? "" : "<p>Provisional: only " + c.parts.length + " of 3 areas are checked so far.</p>") + "<p class='ex-note'>It is an assessment, not Google's star rating.</p>"];
+      }
+      if (ex) ex.avg = ["Average score: " + sc + " out of 100",
+        "<p><b>What it means:</b> the overall business health score, combining " + c.parts.map(function (p) { return p.name.toLowerCase(); }).join(", ") + ". It is the same number as the card below.</p><p><b>How it is calculated:</b> " + c.parts.map(function (p) { return p.name + " " + p.score + " x " + p.share + "%"; }).join(" + ") + " = <b>" + sc + "</b>.</p>"];
+    } catch (e) {}
+  }
+
   var last = "", busy = false, timer = 0;
   function kv(k) { var g = window.storageGetJSON; return typeof g === "function" ? g(k, null).catch(function () { return null; }) : Promise.resolve(null); }
   function refresh(force) {
@@ -79,6 +103,7 @@
       if (!card) { card = document.createElement("section"); card.className = "ov pl-card"; hero.parentNode.insertBefore(card, hero.nextSibling); }
       card.innerHTML = html(c);
       window.__p2pOverallNow = c;
+      syncHero(hero, c);
       var arc = card.querySelector(".arc"); requestAnimationFrame(function () { requestAnimationFrame(function () { if (arc) arc.style.strokeDashoffset = arc.getAttribute("data-off"); }); });
       var n = card.querySelector("[data-count]"); if (n && !RM) { var to = Number(n.getAttribute("data-count")), t0 = performance.now(); (function tick(t) { var p = Math.min(1, (t - t0) / 1100); n.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0); }
       card.querySelector(".ov-ring").addEventListener("click", function () { explain(c); });

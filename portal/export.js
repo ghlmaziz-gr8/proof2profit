@@ -86,7 +86,7 @@
       (c.weak && c.gain > 0 ? "<p><b>Biggest opening: " + esc(c.weak.name) + " (" + c.weak.score + ").</b> Getting it to 80 would lift the overall score by about " + c.gain + " point" + (c.gain === 1 ? "" : "s") + ".</p>" : "") + "</div>";
   }
   function extras(slugStr, a) {
-    return Promise.all([get("reviewlens_fc_" + slugStr), get("reviewlens_seo_" + slugStr), get("reviewlens_social_" + slugStr)]).then(function (r) { return { top: overallCard(a, r[1], r[2]), rest: forecastCard(r[0]) + seoCard(r[1]) + socialCard(r[2]) }; });
+    return Promise.all([get("reviewlens_fc_" + slugStr), get("reviewlens_seo_" + slugStr), get("reviewlens_social_" + slugStr)]).then(function (r) { var oc = window.__p2pOverall && a ? window.__p2pOverall.compute(a, r[1], r[2]) : null; return { ov: oc ? oc.score : null, top: overallCard(a, r[1], r[2]), rest: forecastCard(r[0]) + seoCard(r[1]) + socialCard(r[2]) }; });
   }
   function assessCards(a) {
     var body = '<div class="card"><h2>Aspect breakdown</h2>' + aspects(a.aspects) + "</div>";
@@ -100,7 +100,7 @@
   }
 
   function singleDoc(a, history, ex) {
-    var ai = aiR(a), tn = themeN(a), hasR = na(a.rating) != null, hasC = na(a.review_count) != null;
+    var ai = ex && ex.ov != null ? Math.round(ex.ov / 20 * 100) / 100 : aiR(a), tn = themeN(a), hasR = na(a.rating) != null, hasC = na(a.review_count) != null;
     var body = '<div class="card"><div class="st"><div><small>' + (hasR ? "RATING" : "AI RATING") + '</small><b>' + (hasR ? esc(a.rating) : esc(ai == null ? "–" : ai)) + ' <span style="font-size:13px;color:#7a756c">/ 5</span></b></div><div><small>' + (hasC ? "REVIEW VOLUME" : "THEMES FOUND") + '</small><b>' + (hasC ? esc(a.review_count) : esc(tn == null ? "–" : tn)) + "</b></div></div>" + ((!hasR || !hasC) ? '<p style="margin:12px 0 0;font-size:13px;color:#7a756c">AI rating is the average of the aspect scores out of 5, calculated by our AI from what guests say. It is an assessment, not Google\'s star rating.</p>' : "") + "</div>";
     if (history && history.length && P()) {
       var last = history[history.length - 1];

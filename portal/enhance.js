@@ -493,6 +493,7 @@
         aspects: ["Aspects: " + aspInfo.length,
           "<p><b>What it means:</b> the topics guests talk about most for this kind of business. Here: <b>" + aspInfo.map(function (a) { return a.name; }).join(", ") + "</b>.</p><p><b>How each is scored:</b> 0–100, based on how positive the feedback on that topic is. Tap any bar below to see why it got its score.</p>"]
       };
+      hero.__ex = EX; hero.__isAI = aiRating != null;
       function openEx(k) { var e = EX[k]; if (e) explain(e[0], e[1]); }
       function mk(el, k) { if (!el) return; el.classList.add("enh-tap"); el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", "What does this mean? " + el.textContent.trim()); el.addEventListener("click", function () { openEx(k); }); el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEx(k); } }); var i = h("i", "enh-i", "i"); el.appendChild(i); }
       mk(ring, "rating"); mk(k1, "reviews"); if (typeof k2 !== "undefined" && k2) mk(k2, "avg"); if (typeof k3 !== "undefined" && k3) mk(k3, "aspects");

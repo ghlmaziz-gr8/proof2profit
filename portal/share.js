@@ -161,7 +161,7 @@
       msg.textContent = ""; send.disabled = true; send.textContent = "Sending…";
       var sb = window.__p2p && window.__p2p.sb;
       if (!sb) { msg.style.color = "#b91c1c"; msg.textContent = "Not signed in."; send.disabled = false; send.textContent = "Send email"; return; }
-      extrasFor(last).then(function (ex) { var pa = slim(last.a); if (ex) pa.extras = ex; return sb.rpc("share_report", { p_to: recips, p_note: ta.value.trim(), p_kind: last.kind, p_a: pa, p_b: isCmp ? slim(last.b) : null, p_copy: cp.checked }); }).then(function (r) {
+      extrasFor(last).then(function (ex) { var pa = slim(last.a); if (ex) pa.extras = ex; if (ex && ex.overall && ex.overall.score != null) pa.ai_rating = Math.round(ex.overall.score / 20 * 100) / 100; return sb.rpc("share_report", { p_to: recips, p_note: ta.value.trim(), p_kind: last.kind, p_a: pa, p_b: isCmp ? slim(last.b) : null, p_copy: cp.checked }); }).then(function (r) {
         if (r.error) {
           var m = String(r.error.message || "");
           msg.style.color = "#b91c1c";
