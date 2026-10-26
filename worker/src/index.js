@@ -299,7 +299,9 @@ function parseJsonLoose(t) {
   t = String(t || "").replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try { return JSON.parse(t); } catch (e) { const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e2) {} } return null; }
 }
-async function socialAssess(env, input) {
+async function socialAssess(env, input, hints) {
+  const hf = hints && Number.isFinite(Number(hints.followers)) && Number(hints.followers) > 0 ? Number(hints.followers) : null;
+  const hl = hints && Number.isFinite(Number(hints.avgLikes)) && Number(hints.avgLikes) >= 0 && hints.avgLikes !== "" && hints.avgLikes != null ? Number(hints.avgLikes) : null;
   const t = socialTarget(input);
   let direct = null;
   try { direct = await socialAudit(input); } catch (e) { direct = null; }
@@ -313,8 +315,9 @@ async function socialAssess(env, input) {
   const chunks = g1.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   const sources = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 4);
   const haveDirect = !!(direct && direct.found);
-  if (!haveDirect && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.data?.error?.message ? ": " + String(g1.data.error.message).slice(0, 160) : "") };
-  const facts = direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.";
+  if (!haveDirect && hf == null && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.data?.error?.message ? ": " + String(g1.data.error.message).slice(0, 160) : "") };
+  const owner = (hf != null || hl != null) ? ` Stated by the account owner (unverified): ${hf != null ? "followers " + hf : ""}${hf != null && hl != null ? ", " : ""}${hl != null ? "average likes per post " + hl : ""}.` : "";
+  const facts = owner + " " + (direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.");
   const prompt = `Respond with ONLY a single JSON object, no markdown. Never put a literal double-quote inside a string value.
 
 You are a social media analyst for a small local business. Assess this ${who} for engagement and health.
@@ -323,7 +326,7 @@ Evidence:
 ${facts}
 Web research: ${research || "nothing found"}
 
-Rules: use ONLY the evidence above. Never invent follower counts, engagement figures or posts. If evidence is thin, say so, lower confidence and give a cautious score. Engagement benchmarks are rough industry rules of thumb.
+Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unverified. Never invent follower counts, engagement figures or posts. If evidence is thin, say so, lower confidence and give a cautious score. Engagement benchmarks are rough industry rules of thumb.
 
 {"score":0-100 integer,"confidence":"high|medium|low","followers":number or null,"engagement":"one sentence on how engaged the audience looks and why","posting":"one sentence on posting consistency","score_reason":"2 sentences explaining how the score was reached and what it is based on","headline":"one sentence verdict","strengths":["2-3 items"],"gaps":["2-3 items"],"content_ideas":["3 specific post ideas for this kind of business"],"posting_plan":"one sentence weekly rhythm","evidence_note":"one sentence on what was and was not available"}`;
   const g2 = await gemini(env, { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500, responseMimeType: "application/json" } });
@@ -334,6 +337,7 @@ Rules: use ONLY the evidence above. Never invent follower counts, engagement fig
   r.score = Math.max(0, Math.min(100, Math.round(Number(r.score) || 0)));
   if (!["high", "medium", "low"].includes(r.confidence)) r.confidence = "low";
   if (direct && direct.found && Number.isFinite(direct.followers)) r.followers = direct.followers;
+  else if (hf != null) r.followers = hf;
   else if (!Number.isFinite(Number(r.followers))) r.followers = null;
   return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, ts: Date.now() };
 }
@@ -421,7 +425,7 @@ export default {
       if (u.error) return json({ error: "usage_check_failed" }, 502, h);
       if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
       try {
-        return json({ result: await socialAssess(env, body.url) }, 200, h);
+        return json({ result: await socialAssess(env, body.url, { followers: body.followers, avgLikes: body.avgLikes }) }, 200, h);
       } catch (e) {
         const code = e && e.code ? e.code : "audit_failed";
         return json({ error: code, message: (e && e.message) || "" }, code === "rate_limited" ? 429 : code === "no_data" ? 422 : code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);

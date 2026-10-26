@@ -8,6 +8,7 @@
   function colr(v) { return v >= 75 ? "#1D9E75" : v >= 50 ? "#F69500" : "#C24A34"; }
   function label(v) { return v >= 85 ? "Excellent" : v >= 70 ? "Good" : v >= 50 ? "Fair" : "Needs work"; }
   function nfmt(n) { if (n == null || isNaN(n)) return "–"; n = Number(n); return n >= 1e6 ? (Math.round(n / 1e5) / 10) + "M" : n >= 1e4 ? (Math.round(n / 100) / 10) + "K" : n.toLocaleString(); }
+  function pnum(v) { v = String(v == null ? "" : v).trim().replace(/,/g, ""); if (!v) return null; var m = v.match(/^([\d.]+)\s*([kKmM])?$/); if (!m) return NaN; return Math.round(parseFloat(m[1]) * ({ k: 1e3, m: 1e6 }[(m[2] || "").toLowerCase()] || 1) * 100) / 100; }
   function list(a) { return (a || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join(""); }
   var PF = {
     instagram: { name: "Instagram", color: "#C13584",  },
@@ -33,8 +34,8 @@
   function mount(el, opts) {
     if (!el) return;
     var kvKey = "reviewlens_social_" + opts.slug, data = { profiles: [] };
-    el.innerHTML = '<section class="soc"><div class="soc-top"><p class="soc-eyebrow">Social media</p><h3>How well is your social media working?</h3><p class="soc-meta">Paste a profile link. The AI looks at what is publicly known about the account and scores its engagement and health. Nothing else to fill in.</p></div>' +
-      '<form class="soc-form"><input type="text" class="soc-in" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="instagram.com/yourbusiness or tiktok.com/@yourbusiness" aria-label="Social profile link"><button type="submit" class="soc-go">Assess</button></form><p class="soc-err" hidden></p><div class="soc-body"></div></section>';
+    el.innerHTML = '<section class="soc"><div class="soc-top"><p class="soc-eyebrow">Social media</p><h3>How well is your social media working?</h3><p class="soc-meta">Paste a profile link. The AI looks at what is publicly known about the account and scores its engagement and health. If you know your followers or average likes, add them to sharpen the result. Both are optional.</p></div>' +
+      '<form class="soc-form"><input type="text" class="soc-in" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="instagram.com/yourbusiness or tiktok.com/@yourbusiness" aria-label="Social profile link"><button type="submit" class="soc-go">Assess</button><div class="soc-opt"><label><span>Followers (optional)</span><input class="soc-fo" inputmode="decimal" autocomplete="off" placeholder="e.g. 2.4K"></label><label><span>Avg likes per post (optional)</span><input class="soc-lk" inputmode="decimal" autocomplete="off" placeholder="e.g. 85"></label></div></form><p class="soc-err" hidden></p><div class="soc-body"></div></section>';
     var root = el.querySelector(".soc"), inp = root.querySelector(".soc-in"), errEl = root.querySelector(".soc-err"), body = root.querySelector(".soc-body");
     function err(t) { errEl.textContent = t || ""; errEl.hidden = !t; }
     function persist() { if (opts.save) opts.save(kvKey, data); }
@@ -53,7 +54,7 @@
     function assess(pr) {
       var api = window.__p2p && window.__p2p.api; if (!api) { err("Not available right now."); return; }
       pr.busy = true; draw(); err("");
-      api("/social-assess", { url: pr.url }).then(function (r) {
+      api("/social-assess", { url: pr.url, followers: pr.hf == null ? undefined : pr.hf, avgLikes: pr.hl == null ? undefined : pr.hl }).then(function (r) {
         var R = r.result; pr.busy = false;
         if (!R || !R.report) throw { code: "no_data" };
         pr.report = R.report; pr.direct = R.direct; pr.sources = R.sources || []; pr.ts = Date.now();
@@ -72,7 +73,10 @@
       if (!d) { err("Use the link to the profile itself, like instagram.com/yourbusiness, tiktok.com/@yourbusiness, facebook.com/yourpage, youtube.com/@yourchannel or x.com/yourhandle."); return; }
       if (data.profiles.some(function (p) { return p.platform === d.platform && p.handle.toLowerCase() === d.handle.toLowerCase(); })) { err("That profile is already added."); return; }
       if (data.profiles.length >= 6) { err("You can track up to 6 profiles."); return; }
-      var pr = { id: "p" + Date.now(), platform: d.platform, handle: d.handle, url: d.url, snaps: [] };
+      var hf = pnum(root.querySelector(".soc-fo").value), hl = pnum(root.querySelector(".soc-lk").value);
+      if ((hf != null && (isNaN(hf) || hf <= 0)) || (hl != null && (isNaN(hl) || hl < 0))) { err("Numbers only, please. You can use K or M, like 2.4K."); return; }
+      var pr = { id: "p" + Date.now(), platform: d.platform, handle: d.handle, url: d.url, snaps: [], hf: hf, hl: hl };
+      root.querySelector(".soc-fo").value = ""; root.querySelector(".soc-lk").value = "";
       data.profiles.push(pr); inp.value = ""; assess(pr);
     });
 
@@ -130,7 +134,7 @@
   }
 
   var css = ".soc{margin:18px 0;border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}.soc-eyebrow{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--coral-dark);font-weight:700}.soc h3{margin:2px 0 4px;font:700 19px 'Space Grotesk',sans-serif}.soc-meta{margin:0;font-size:12.5px;color:var(--ink-soft)}" +
-    ".soc-form{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.soc-in{flex:1 1 240px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;font-size:15px;background:#fff;color:var(--ink)}.soc-in:focus,.soc-nf input:focus{outline:2px solid var(--coral);outline-offset:1px}" +
+    ".soc-form{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.soc-in{flex:1 1 240px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;font-size:15px;background:#fff;color:var(--ink)}.soc-opt{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}.soc-opt span{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:3px}.soc-opt input{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:#fff;color:var(--ink)}@media(max-width:600px){.soc-opt{grid-template-columns:1fr}}.soc-in:focus,.soc-nf input:focus{outline:2px solid var(--coral);outline-offset:1px}" +
     ".soc-go{background:var(--coral);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;min-height:0;width:auto}.soc-go.sm{padding:9px 14px;font-size:13.5px}.soc-go.ghost{background:#fff;color:var(--coral-dark);border:1px solid var(--coral)}.soc-go.ghost:hover{background:rgba(246,149,0,.1);color:var(--coral-dark)}.soc-go:disabled{opacity:.6;cursor:wait}" +
     ".soc-err,.soc-err2{color:var(--warn);font-size:13.5px;margin:10px 0 0}.soc-empty,.soc-hint,.soc-fine{font-size:13px;color:var(--ink-soft);margin:10px 0 0}.soc-body{margin-top:6px}" +
     ".soc-all{position:relative;display:flex;align-items:baseline;gap:10px;width:100%;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 34px 14px 16px;margin:14px 0 4px;min-height:0;text-align:left;cursor:pointer}.soc-all:hover{background:linear-gradient(135deg,#24272d,#35291c);color:#fff}.soc-all span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#FFD35A;font-weight:700;flex:1}.soc-all b{font:700 30px 'Space Grotesk',sans-serif}.soc-all em{font-style:normal;font-size:13px;color:rgba(255,255,255,.8)}" +

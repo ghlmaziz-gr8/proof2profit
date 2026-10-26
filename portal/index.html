@@ -802,7 +802,7 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
 function mapSampleError(e){
   if(!e || typeof e !== 'object') return new Error('API_ERROR: ' + String(e));
   if(e.code === 'rate_limited') return new Error('SAMPLE_RATE_LIMITED');
-  if(e.code === 'not_granted') return new Error('API_ERROR: This page needs your permission to use Claude — please allow it when prompted, then try again.');
+  if(e.code === 'not_granted') return new Error('API_ERROR: This page needs your permission to use the AI — please allow it when prompted, then try again.');
   if(e.code === 'sampling_disabled' || e.code === 'not_declared') return new Error('API_ERROR: AI features are not available for this account.');
   if(e.code === 'invalid_json') return new Error('No JSON found in response. Raw text: ' + String(e.text || '').slice(0, 200));
   if(e.code === 'cancelled') return new Error('API_ERROR: Request cancelled.');
@@ -1177,7 +1177,7 @@ function renderReport(data){
       <p class="list-title">${monthLabel} trend outlook</p>
       <div class="chip-row">${risingChips}${watchChips}</div>
       ${outlook.guidance ? `<p class="outlook-note">${outlook.guidance}</p>` : ''}
-      <p class="outlook-disclaimer">${data._grounded ? 'Directional idea based on real current search results and seasonal timing — not a guaranteed forecast.' : "Directional idea based on Claude's general knowledge and seasonal timing — live search wasn't available for this result, so treat it as a starting point."}</p>
+      <p class="outlook-disclaimer">${data._grounded ? 'Directional idea based on real current search results and seasonal timing — not a guaranteed forecast.' : "Directional idea based on the AI's general knowledge and seasonal timing — live search wasn't available for this result, so treat it as a starting point."}</p>
     </div>
   ` : '';
 
@@ -1585,7 +1585,7 @@ inputA.addEventListener('keydown', e => { if(e.key === 'Enter') compareBusinesse
 inputB.addEventListener('keydown', e => { if(e.key === 'Enter') compareBusinesses(); });
 
 const tutSlides = [
-  { title: "Welcome to P2P", body: "Paste a business name to see a breakdown of what customers likely love and where things may be falling short — based on Claude's general knowledge, not live reviews in this view." },
+  { title: "Welcome to P2P", body: "Paste a business name to see a breakdown of what customers likely love and where things may be falling short — based on the AI's general knowledge, not live reviews in this view." },
   { title: "Two ways to look", body: "Use Single business for a full breakdown of one place, or Compare two to see two businesses side by side on the same aspects." },
   { title: "Read the shape", body: "The radar chart gives you an at-a-glance read — round and full means consistently strong, spiky means uneven. Bars below give exact scores." },
   { title: "Trends and campaign ideas", body: "Each report also includes a seasonal trend outlook and a couple of campaign angle ideas — both are directional suggestions to think about, not guarantees." }
