@@ -777,6 +777,13 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
     if(gmFacts.review_count != null) parsed.review_count = String(gmFacts.review_count);
     parsed._gmaps = true;
   }
+  // A rating and review total the person typed in from Google Maps is used when the live read found nothing.
+  try{
+    if(!(gmFacts && gmFacts.found) && parsed.name){
+      const ov = await storageGetJSON('reviewlens_gm_' + slugify(parsed.name), null);
+      if(ov){ if(ov.rating != null) parsed.rating = ov.rating; if(ov.review_count) parsed.review_count = String(ov.review_count); parsed._manual = true; }
+    }
+  }catch(e){}
   // Contact details and review recency: same rule, only from real search results, and shape-checked.
   const web = String(parsed.website || '').trim(), ph = String(parsed.phone || '').trim(), lr = String(parsed.last_review || '').trim();
   const webOk = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}([\/?#]\S*)?$/i.test(web);
@@ -1179,6 +1186,39 @@ function contactHtml(d){
   return bits.length ? `<div class="biz-contact">${bits.join('')}</div>` : '';
 }
 
+// Manual entry of the Google rating and review count (used when the live read finds nothing).
+document.addEventListener('click', async (ev) => {
+  const t = ev.target && ev.target.closest ? ev.target.closest('[data-gm-edit],[data-gm-save],[data-gm-cancel]') : null;
+  if(!t) return;
+  ev.preventDefault();
+  const cur = window.__p2pLast && window.__p2pLast.kind === 'single' ? window.__p2pLast.a : null;
+  if(!cur) return;
+  const line = t.closest('.gm-line');
+  if(t.hasAttribute('data-gm-cancel')){ renderReport(cur); return; }
+  if(t.hasAttribute('data-gm-edit') && line){
+    const inp = 'padding:6px 8px;border:1px solid #d1d5db;border-radius:8px;font:13px system-ui,sans-serif;';
+    line.innerHTML = `⭐ <label>Google rating <input id="gmR" type="number" min="0" max="5" step="0.1" value="${cur.rating != null ? escHtml(String(cur.rating)) : ''}" style="${inp}width:70px"></label> <label>Total reviews <input id="gmC" type="text" inputmode="numeric" placeholder="e.g. 1,250" value="${cur.review_count && /\d/.test(String(cur.review_count)) ? escHtml(String(cur.review_count)) : ''}" style="${inp}width:110px"></label> <a href="#" data-gm-save style="font-weight:600;">Save</a> · <a href="#" data-gm-cancel>Cancel</a> <span id="gmMsg" style="color:#b91c1c"></span>`;
+    return;
+  }
+  if(t.hasAttribute('data-gm-save') && line){
+    const msg = line.querySelector('#gmMsg');
+    const rv = line.querySelector('#gmR').value.trim(), cv = line.querySelector('#gmC').value.trim();
+    let r = null, c = null;
+    if(rv !== ''){ r = Math.round(Number(rv) * 10) / 10; if(!(r > 0 && r <= 5)){ msg.textContent = 'Rating must be between 0.1 and 5.'; return; } }
+    if(cv !== ''){ const digits = cv.replace(/[,\s+]/g, ''); if(/^\d{1,9}$/.test(digits)){ c = Number(digits).toLocaleString('en-US') + (cv.endsWith('+') ? '+' : ''); } else { msg.textContent = 'Reviews must be a number, like 1,250.'; return; } }
+    if(r == null && c == null){ msg.textContent = 'Enter a rating, a review count, or both.'; return; }
+    cur.rating = r; cur.review_count = c; cur._manual = true; cur._gmaps = false;
+    try{
+      const slug = slugify(cur.name);
+      await storageSetJSON('reviewlens_gm_' + slug, { rating: r, review_count: c, ts: Date.now() });
+      const hist = await storageGetJSON('reviewlens_hist_' + slug, []);
+      const tgt = cur._viewing ? hist.find(h => h.ts === cur._ts) : hist[hist.length - 1];
+      if(tgt){ tgt.rating = r; tgt.review_count = c; if(tgt.full){ tgt.full.rating = r; tgt.full.review_count = c; tgt.full._manual = true; } await storageSetJSON('reviewlens_hist_' + slug, hist); }
+    }catch(e){}
+    renderReport(cur);
+  }
+});
+
 function renderReport(data){
   const aspectsHtml = (data.aspects || []).map(a => `
     <div class="aspect">
@@ -1236,7 +1276,7 @@ function renderReport(data){
         <div class="stat"><p class="label">Review volume</p><p class="value">${data.review_count ?? '—'}</p></div>
       </div>
 
-      ${(()=>{const rc=data.review_count,okRc=rc!=null&&rc!==''&&!/^(unknown|—|n\/a)$/i.test(String(rc)),okR=data.rating!=null&&Number(data.rating)>0;return (okR||okRc)?`<p class="p2p-eng" style="margin:10px 0 0;">⭐ ${okR?`Google rating <b>${escHtml(String(data.rating))}</b> / 5`:''}${okR&&okRc?' · ':''}${okRc?`<b>${escHtml(String(rc))}</b> Google reviews`:''}</p>`:''})()}
+      ${(()=>{const rc=data.review_count,okRc=rc!=null&&rc!==''&&!/^(unknown|—|n\/a)$/i.test(String(rc)),okR=data.rating!=null&&Number(data.rating)>0;const txt=(okR||okRc)?`⭐ ${okR?`Google rating <b>${escHtml(String(data.rating))}</b> / 5`:''}${okR&&okRc?' · ':''}${okRc?`<b>${escHtml(String(rc))}</b> Google reviews`:''}${data._manual?' <span style="opacity:.7">(entered manually)</span>':''}`:'⭐ Google rating and review count not available for this business.';return `<p class="p2p-eng gm-line" style="margin:10px 0 0;">${txt} <a href="#" data-gm-edit style="color:var(--coral,#E0522D);font-weight:600;">${(okR||okRc)?'Edit':'Add from Google Maps'}</a></p>`})()}
       <p class="section-label">Aspect breakdown</p>
       ${buildRadarSingle(data.aspects || [])}
       ${aspectsHtml}
