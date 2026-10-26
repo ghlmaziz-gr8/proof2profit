@@ -416,6 +416,72 @@ async function socialAudit(input) {
   return out;
 }
 
+
+// ---------- Recent posts + formula score (public pages only) ----------
+function ageDaysFromText(t) {
+  const m = String(t || "").toLowerCase().match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago/);
+  if (!m) return /streamed|premiered/.test(String(t || "").toLowerCase()) ? null : null;
+  const n = Number(m[1]); const per = { second: 1 / 86400, minute: 1 / 1440, hour: 1 / 24, day: 1, week: 7, month: 30, year: 365 }[m[2]];
+  return n * per;
+}
+function parseViews(t) { const m = String(t || "").replace(/,/g, "").match(/([\d.]+)\s*([KMB])?\s*views?/i); return m ? parseCount(m[1] + (m[2] || "")) : null; }
+function findKey(o, key, out, depth) {
+  if (!o || typeof o !== "object" || depth > 14 || out.length >= 40) return;
+  if (Array.isArray(o)) { for (const x of o) findKey(x, key, out, depth + 1); return; }
+  for (const k of Object.keys(o)) { if (k === key) out.push(o[k]); else findKey(o[k], key, out, depth + 1); }
+}
+// YouTube channel pages embed their latest videos (views and "x days ago") in a public JSON blob.
+function parseYoutubePosts(html) {
+  const m = html.match(/var ytInitialData\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
+  if (!m) return [];
+  let d; try { d = JSON.parse(m[1]); } catch { return []; }
+  const vids = []; findKey(d, "videoRenderer", vids, 0);
+  const posts = [];
+  for (const v of vids) {
+    const views = parseViews(v?.viewCountText?.simpleText || (v?.viewCountText?.runs || []).map((r) => r.text).join(""));
+    const age = ageDaysFromText(v?.publishedTimeText?.simpleText);
+    if (views != null || age != null) posts.push({ views, ageDays: age });
+    if (posts.length >= 12) break;
+  }
+  return posts;
+}
+async function recentPosts(t) {
+  if (t.platform !== "youtube") return [];
+  try {
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 9000);
+    const res = await fetch(t.url + "/videos", { redirect: "follow", signal: ctl.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9", Cookie: "CONSENT=YES+1" } });
+    const body = await readCapped(res, 2500000); clearTimeout(timer);
+    return parseYoutubePosts(body.text);
+  } catch { return []; }
+}
+const clamp100 = (x) => Math.max(0, Math.min(100, Math.round(x)));
+// Deterministic score: audience response (60%) and posting rhythm (40%), each measured from public numbers where available.
+function socialFormula(platform, direct, posts, hints) {
+  const followers = Number.isFinite(Number(hints.followers)) && Number(hints.followers) > 0 ? Number(hints.followers) : (direct && direct.followers) || null;
+  const parts = [];
+  if (followers) {
+    let rate = null, detail = "", target = null;
+    if (platform === "youtube" && posts.filter((p) => p.views != null).length >= 3) {
+      const v = posts.filter((p) => p.views != null).map((p) => p.views).sort((a, b) => a - b); const med = v[Math.floor(v.length / 2)];
+      rate = med / followers; target = 0.1; detail = "typical (median) views on the last " + v.length + " videos is " + Math.round(rate * 1000) / 10 + "% of subscribers; 10% or more scores 100";
+    } else if (hints.avgLikes != null && Number.isFinite(Number(hints.avgLikes))) {
+      rate = Number(hints.avgLikes) / followers; target = platform === "tiktok" ? 0.1 : 0.03; detail = "owner-stated average of " + hints.avgLikes + " likes per post is " + Math.round(rate * 1000) / 10 + "% of followers; " + target * 100 + "% or more scores 100";
+    } else if (platform === "tiktok" && direct && direct.hearts && direct.posts) {
+      rate = direct.hearts / direct.posts / followers; target = 0.1; detail = "average " + Math.round(direct.hearts / direct.posts) + " likes per video over " + direct.posts + " videos is " + Math.round(rate * 1000) / 10 + "% of followers; 10% or more scores 100";
+    }
+    if (rate != null) parts.push({ name: "Audience response", weight: 0.6, score: clamp100(rate / target * 100), detail });
+  }
+  const ages = posts.map((p) => p.ageDays).filter((a) => a != null);
+  if (ages.length >= 3) {
+    const span = Math.max(7, Math.max.apply(null, ages) - Math.min.apply(null, ages)); const ppw = (ages.length - 1) / (span / 7); const newest = Math.min.apply(null, ages);
+    let s = Math.min(100, ppw / 1 * 100); if (newest > 60) s *= 0.4; else if (newest > 30) s *= 0.7;
+    parts.push({ name: "Posting rhythm", weight: 0.4, score: clamp100(s), detail: "about " + Math.round(ppw * 10) / 10 + " posts a week over the last " + ages.length + " posts, latest " + Math.round(newest) + " days ago; 1 a week or more scores 100" });
+  }
+  if (!parts.length) return null;
+  const tw = parts.reduce((s, p) => s + p.weight, 0);
+  return { score: clamp100(parts.reduce((s, p) => s + p.score * p.weight, 0) / tw), parts, posts: posts.length };
+}
+
 // ---------- AI social assessment: public read + Google Search grounding, then a structured report ----------
 function parseJsonLoose(t) {
   t = String(t || "").replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -427,6 +493,8 @@ async function socialAssess(env, input, hints, email) {
   const t = socialTarget(input);
   let direct = null;
   try { direct = await socialAudit(input); } catch (e) { direct = null; }
+  const posts = await recentPosts(t);
+  const formula = socialFormula(t.platform, direct && direct.found ? direct : null, posts, { followers: hf, avgLikes: hl });
   const who = `${t.platform} profile @${t.handle} (${t.url})`;
   const eng = await activeEngine(env, email);
   const g1 = eng.grounding ? await runAI(env, eng, { prompt: `Find what is publicly known about the ${who}. Report only what current web sources show: approximate follower count, how often it posts, typical likes/comments/views per post, content themes, recent activity, collaborations or press, and any signs the account is inactive. Give figures only when a source states them. If you find almost nothing, say so plainly.`, search: true, json: false, maxTokens: 1500, temperature: 0.2 }) : { status: 0, text: "", chunks: [] };
@@ -437,13 +505,14 @@ async function socialAssess(env, input, hints, email) {
   if (!haveDirect && hf == null && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.error ? ": " + String(g1.error).slice(0, 160) : "") };
   const owner = (hf != null || hl != null) ? ` Stated by the account owner (unverified): ${hf != null ? "followers " + hf : ""}${hf != null && hl != null ? ", " : ""}${hl != null ? "average likes per post " + hl : ""}.` : "";
   const facts = owner + " " + (direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.");
+  const fm = formula ? " Measured by formula from public numbers: " + formula.parts.map((p) => p.name + " " + p.score + "/100 (" + p.detail + ")").join("; ") + ". Formula score " + formula.score + ". Keep your score close to this unless the research clearly contradicts it." : "";
   const prompt = `Respond with ONLY a single JSON object, no markdown. Never put a literal double-quote inside a string value.
 
 You are a social media analyst for a small local business. Assess this ${who} for engagement and health.
 
 Evidence:
 ${facts}
-Web research: ${research || "nothing found"}
+Web research: ${research || "nothing found"}${fm}
 
 Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unverified. Never invent follower counts, engagement figures or posts. If evidence is thin, say so, lower confidence and give a cautious score. Engagement benchmarks are rough industry rules of thumb.
 
@@ -454,6 +523,7 @@ Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unv
   const r = parseJsonLoose(g2.text);
   if (!r || typeof r.headline !== "string") throw { code: "ai_error", message: "unreadable AI answer" };
   r.score = Math.max(0, Math.min(100, Math.round(Number(r.score) || 0)));
+  if (formula) { r.formula = formula; r.ai_score = r.score; r.score = clamp100(formula.score * 0.6 + r.score * 0.4); if (formula.parts.length >= 2 && r.confidence === "low") r.confidence = "medium"; }
   if (!["high", "medium", "low"].includes(r.confidence)) r.confidence = "low";
   if (direct && direct.found && Number.isFinite(direct.followers)) r.followers = direct.followers;
   else if (hf != null) r.followers = hf;
@@ -461,7 +531,7 @@ Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unv
   return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, engine: eng.label + " · " + eng.model, ts: Date.now() };
 }
 
-export { seoAudit, socialAudit, socialTarget, readSocial, socialAssess };
+export { seoAudit, socialAudit, socialTarget, readSocial, socialAssess, parseYoutubePosts, socialFormula };
 
 export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(drain(env)); },
