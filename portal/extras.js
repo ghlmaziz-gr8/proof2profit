@@ -1,8 +1,8 @@
 // Notifications bell + profile settings for the portal. Loaded after shim.js.
 (function () {
   var sb, profile = null, notes = [], open = false, me = null;
-  var ROLES = { super: "Super user", admin: "Admin", sales: "Sales", owner: "Business owner", member: "Team member" };
-  var CAN_INVITE = { super: ["admin", "sales", "owner", "super"], admin: ["sales", "owner"], sales: ["owner"] };
+  var ROLES = { super: "Super user", admin: "Admin", agency_admin: "Agency admin", sales: "Sales", owner: "Business owner", member: "Team member" };
+  var CAN_INVITE = { super: ["admin", "sales", "owner", "super"], admin: ["sales", "owner"], agency_admin: ["sales", "owner"], sales: ["owner"] };
   var KINDS = {
     welcome: "Welcome and access messages",
     limit: "Daily limit reached",
@@ -138,12 +138,17 @@
         ab.addEventListener("click", function () { dlg.close(); openAccess(); });
         body.appendChild(ab);
       }
-      if (me.role === "super" || me.role === "admin" || me.role === "sales") {
+      if (me.role === "super" || me.role === "admin" || me.role === "agency_admin" || me.role === "sales") {
         var tb = el("button", { class: "p2x-btn ghost", type: "button" }, "Invitation tracker");
         tb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("invites"); });
         body.appendChild(tb);
       }
-      if (me.role === "super" || me.role === "admin") {
+      if (me.role === "super") {
+        var gb = el("button", { class: "p2x-btn ghost", type: "button" }, "Agencies");
+        gb.addEventListener("click", function () { dlg.close(); openAgencies(); });
+        body.appendChild(gb);
+      }
+      if (me.role === "super" || me.role === "admin" || me.role === "agency_admin") {
         var hb = el("button", { class: "p2x-btn ghost", type: "button" }, "Behavior & heat map");
         hb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("behavior"); });
         body.appendChild(hb);
@@ -229,6 +234,7 @@
   function agoDay(iso) { try { return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; } }
   var ROLE_INFO = {
     super: ["Super user", "Full control of everything", "M12 2l2.6 6.2L21 9l-5 4.4L17.5 20 12 16.6 6.5 20 8 13.4 3 9l6.4-.8z"],
+    agency_admin: ["Agency admin", "Runs an agency workspace", "M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z"],
     admin: ["Admin", "Manages sales and owners", "M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z"],
     sales: ["Sales", "Brings in business owners", "M3 17l6-6 4 4 8-8M15 7h6v6"],
     owner: ["Business owner", "Analyzes and builds a team", "M4 10l1.5-5h13L20 10M5 10v9h14v-9M9 19v-5h6v5"],
@@ -348,6 +354,46 @@
     ].join("");
     var st2 = document.createElement("style"); st2.textContent = c; document.head.appendChild(st2);
   })();
+
+  // Super user: create agency workspaces and see their names and head counts (never their content).
+  var agd = null;
+  function openAgencies() {
+    if (!agd) { agd = el("dialog", { class: "p2x-modal" }); document.body.appendChild(agd); }
+    agd.textContent = "";
+    var body = el("div", { class: "p2x-body" });
+    body.appendChild(el("h3", null, "Agencies"));
+    body.appendChild(el("p", { class: "p2x-note" }, "Each agency is a separate workspace. Its people, businesses and reports are visible only inside it. You see only the name and head count."));
+    var list = el("div", { style: "margin:10px 0" }); body.appendChild(list);
+    var nm = el("input", { type: "text", placeholder: "Agency name", maxlength: "80", style: "width:100%;margin:4px 0;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;box-sizing:border-box" });
+    var em = el("input", { type: "email", placeholder: "Agency admin's email", style: "width:100%;margin:4px 0;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;box-sizing:border-box" });
+    var msg = el("p", { class: "p2x-note" });
+    var go = el("button", { class: "p2x-btn", type: "button" }, "Create agency and invite admin");
+    var cl = el("button", { class: "p2x-btn ghost", type: "button" }, "Close");
+    cl.addEventListener("click", function () { agd.close(); });
+    function load() {
+      sb.rpc("list_orgs").then(function (r) {
+        list.textContent = "";
+        ((r && r.data) || []).forEach(function (o) {
+          var row = el("div", { style: "display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #f0ebe1;font-size:13px" });
+          var l = el("span", null, o.name + (o.is_platform ? " (your team)" : "")); var rr = el("b", null, o.people + (o.people === 1 ? " person" : " people"));
+          row.appendChild(l); row.appendChild(rr); list.appendChild(row);
+          if (o.admin_email) { list.appendChild(el("div", { class: "p2x-note", style: "margin:0 0 4px" }, "Admin: " + o.admin_email)); }
+        });
+      });
+    }
+    go.addEventListener("click", function () {
+      go.disabled = true; msg.style.color = "#6b7280"; msg.textContent = "Creating…";
+      sb.rpc("create_agency", { p_name: nm.value, p_admin_email: em.value }).then(function (r) {
+        go.disabled = false;
+        if (r.error) { msg.style.color = "#b91c1c"; msg.textContent = r.error.message; return; }
+        msg.style.color = "#047857"; msg.textContent = "Created. The admin has been emailed an invitation."; nm.value = ""; em.value = ""; load();
+      });
+    });
+    body.appendChild(nm); body.appendChild(em); body.appendChild(msg);
+    var row2 = el("div", { style: "display:flex;gap:8px;margin-top:8px" }); row2.appendChild(go); row2.appendChild(cl); body.appendChild(row2);
+    agd.appendChild(body); load();
+    if (agd.showModal) agd.showModal();
+  }
 
   function openAccess() {
     if (!me) return;

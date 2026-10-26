@@ -282,8 +282,8 @@
     sb = window.__p2p && window.__p2p.sb; if (!sb) return;
     if (!dlg) { dlg = el("dialog", "p2x-modal p2x-rich p2i"); document.body.appendChild(dlg); }
     sb.rpc("my_role").then(function (r) {
-      role = r.data && r.data.role; if (["super", "admin", "sales"].indexOf(role) < 0) return;
-      var tabs = [["invites", "Invitation tracker"]]; if (role === "super" || role === "admin") tabs.push(["behavior", "Behavior & heat map"]);
+      role = r.data && r.data.role; if (["super", "admin", "agency_admin", "sales"].indexOf(role) < 0) return;
+      var tabs = [["invites", "Invitation tracker"]]; if (role === "super" || role === "admin" || role === "agency_admin") tabs.push(["behavior", "Behavior & heat map"]);
       var cur = (tab === "behavior" && tabs.length > 1) ? "behavior" : "invites";
       var ui;
       function go(t) { cur = t; ui = shell("Know what's happening on", "Proof to Profit", tabs, go); Object.keys(ui.btns).forEach(function (k) { ui.btns[k].classList.toggle("on", k === cur); }); if (cur === "invites") renderInvites(ui); else renderBehavior(ui); }
