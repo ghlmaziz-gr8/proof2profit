@@ -28,7 +28,7 @@
             gate.hidden = true;
             chip.hidden = false;
             chipEmail.textContent = (s.user && s.user.email) || "Signed in";
-            window.__p2p = { sb: sb, session: function () { return session; } };
+            window.__p2p = { sb: sb, session: function () { return session; }, api: function (p, b) { return api(p, b); } };
             sb.rpc("ensure_profile").then(function () {
               window.__p2p.ready = true;
               window.dispatchEvent(new CustomEvent("p2p:ready"));
@@ -75,7 +75,7 @@
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (r.ok) return d;
-        var code = d.error === "rate_limited" ? "rate_limited" : d.error === "prompt_too_large" ? "prompt_too_large" : "error";
+        var code = /^(rate_limited|prompt_too_large|bad_url|blocked_host|unreachable|not_found|not_html|audit_failed)$/.test(d.error) ? d.error : "error";
         var e = { code: code, message: d.message || d.error || "Request failed" };
         throw e;
       });

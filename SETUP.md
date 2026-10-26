@@ -48,3 +48,6 @@ The invite list is only reachable through role-checked database functions, so ow
 
 ## Share by email
 Run `supabase/share.sql` once in the Supabase SQL editor. It adds `share_report(...)`, which builds a clean read-only email (single analysis or comparison) on the server and queues it in `email_outbox`; the existing Worker cron sends it. Limits: 5 recipients per share, 30 emails per person per day. Portal side: `portal/share.js`.
+
+## Website SEO check
+- Worker endpoint `/seo` fetches a public homepage (SSRF-guarded: public http/https hosts only, ports 80/443, 6 redirects, 1.5 MB cap) and returns facts. Scoring lives in `portal/seo.js`. Limit: `DAILY_SEO_LIMIT` (default 20/day per user). Needs no new secrets; paste the updated `worker/src/index.js` into the p2p-api editor.
