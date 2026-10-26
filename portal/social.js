@@ -81,9 +81,18 @@
     });
 
     function growth(pr) {
-      var sn = pr.snaps || [], L = sn[sn.length - 1]; if (!L || L.followers == null) return null;
-      for (var i = sn.length - 2; i >= 0; i--) { var d = (L.ts - sn[i].ts) / DAY; if (d >= 7 && sn[i].followers > 0 && L.followers != null) return { abs: L.followers - sn[i].followers, pct: (L.followers - sn[i].followers) / sn[i].followers / d * 30 * 100, days: Math.round(d), dScore: L.score - sn[i].score }; }
-      return null;
+      var sn = (pr.snaps || []).filter(function (x) { return x && x.followers != null && !isNaN(x.followers); }), L = sn[sn.length - 1]; if (!L || sn.length < 2) return null;
+      var P = sn[sn.length - 2], d = Math.max(1, (L.ts - P.ts) / DAY);
+      return { abs: L.followers - P.followers, tot: P.followers > 0 ? (L.followers - P.followers) / P.followers * 100 : null, days: Math.round(d), since: P.ts, pct: P.followers > 0 && d >= 7 ? (L.followers - P.followers) / P.followers / d * 30 * 100 : null, series: sn.slice(-12) };
+    }
+    function signed(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + nfmt(Math.abs(n)); }
+    // monthly follower trend: bars for each saved month, with the change from the month before
+    function trend(g) {
+      var sr = g.series, mx = Math.max.apply(null, sr.map(function (x) { return x.followers; })), mn = Math.min.apply(null, sr.map(function (x) { return x.followers; })), span = Math.max(1, mx - mn);
+      return '<div class="soc-tr"><p class="soc-trh">Followers by month</p><div class="soc-trb">' + sr.map(function (x, i) {
+        var h = 22 + (x.followers - mn) / span * 68, dl = i ? x.followers - sr[i - 1].followers : null;
+        return '<div class="soc-col" style="--d:' + (i * 70) + 'ms"><em class="' + (dl > 0 ? "up" : dl < 0 ? "dn" : "") + '">' + (dl == null ? "" : signed(dl)) + '</em><i style="height:' + h.toFixed(0) + '%"></i><span>' + new Date(x.ts).toLocaleDateString("default", { month: "short" }) + '</span></div>';
+      }).join("") + "</div></div>";
     }
     function card(pr) {
       var P = PF[pr.platform], id = pr.id;
@@ -94,9 +103,10 @@
       var tiles = '';
       if (R.followers != null) tiles += '<div class="soc-t"><b>' + nfmt(R.followers) + '</b><span>Followers</span></div>';
       tiles += '<button type="button" class="soc-t" data-k="conf" data-p="' + id + '"><b>' + esc(R.confidence) + '</b><span>Confidence</span><i class="soc-i">i</i></button>';
-      if (g) tiles += '<div class="soc-t"><b>' + (g.pct > 0 ? "+" : "") + (Math.round(g.pct * 10) / 10) + '%</b><span>Growth / month</span></div>';
+      if (g) tiles += '<div class="soc-t soc-gr ' + (g.abs > 0 ? "up" : g.abs < 0 ? "dn" : "") + '"><b>' + (g.abs > 0 ? "▲ " : g.abs < 0 ? "▼ " : "● ") + signed(g.abs) + '</b><span>since ' + fmtD(g.since) + (g.tot != null ? " (" + (g.tot > 0 ? "+" : "") + (Math.round(g.tot * 10) / 10) + "%)" : "") + '</span></div>';
+      else if (R.followers != null) tiles += '<div class="soc-t soc-gr"><b>—</b><span>Re-assess next month to see follower growth</span></div>';
       var h = head + '<div class="soc-sum"><button type="button" class="soc-ring" data-k="score" data-p="' + id + '" aria-label="How the score was reached"><svg viewBox="0 0 92 92" width="92" height="92"><circle cx="46" cy="46" r="38" fill="none" stroke="currentColor" stroke-opacity=".14" stroke-width="8"/><circle class="arc" cx="46" cy="46" r="38" fill="none" stroke="' + colr(R.score) + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(1) + '" stroke-dashoffset="' + circ.toFixed(1) + '" data-off="' + (circ * (1 - R.score / 100)).toFixed(1) + '" transform="rotate(-90 46 46)"/></svg><span class="n"><b data-count="' + R.score + '">' + (RM ? R.score : 0) + '</b></span></button><div class="soc-tiles">' + tiles + '</div></div>' +
-        '<p class="soc-head">' + esc(R.headline) + '</p>' +
+        (g && g.series.length > 1 ? trend(g) : '') + '<p class="soc-head">' + esc(R.headline) + '</p>' +
         (R.engagement ? '<p class="soc-line">💬 ' + esc(R.engagement) + '</p>' : '') + (R.posting ? '<p class="soc-line">🗓 ' + esc(R.posting) + '</p>' : '') +
         '<div class="soc-cols"><div><b class="g">What is working</b><ul>' + list(R.strengths) + '</ul></div><div><b class="r">Gaps to close</b><ul>' + list(R.gaps) + '</ul></div></div>' +
         '<div class="soc-ideas"><b>Post ideas</b><ol>' + list(R.content_ideas) + '</ol></div>' +
@@ -111,6 +121,8 @@
       if (!ps.length) html = '<p class="soc-empty">No profiles yet. Paste a link above to get started.</p>';
       else {
         if (overall != null && sc.length > 1) html += '<button type="button" class="soc-all" data-k="all"><span>Overall social score</span><b style="color:' + colr(overall) + '">' + overall + '</b><em>' + label(overall) + '</em><i class="soc-i">i</i></button>';
+        var tg = 0, tn = 0; sc.forEach(function (p) { var g = growth(p); if (g) { tg += g.abs; tn++; } });
+        if (tn) html += '<p class="soc-sumg ' + (tg > 0 ? "up" : tg < 0 ? "dn" : "") + '">' + (tg >= 0 ? "▲ " : "▼ ") + 'Across ' + tn + ' profile' + (tn === 1 ? "" : "s") + ': <b>' + signed(tg) + ' followers</b> since the previous assessment</p>';
         html += ps.map(card).join("");
       }
       body.innerHTML = html; wire();
@@ -145,8 +157,12 @@
     ".soc-bm{margin-top:12px}.soc-bar{position:relative;height:10px;border-radius:99px;background:#f1eee9;overflow:visible}.soc-bar i{position:absolute;top:0;bottom:0}.soc-bar .z1{left:0;background:#F4C9BF;border-radius:99px 0 0 99px}.soc-bar .z2{background:#FBE3B5}.soc-bar .z3{background:#BFE6D6;border-radius:0 99px 99px 0}.soc-bar em{position:absolute;top:-4px;width:4px;height:18px;margin-left:-2px;border-radius:2px;background:var(--ink)}.soc-bm p{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft)}" +
     ".soc-manual{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}.soc-manual summary{cursor:pointer;font-weight:700;font-size:13.5px;color:var(--coral-dark)}.soc-help{margin:8px 0;font-size:12.5px;color:var(--ink-soft)}.soc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.soc-nf label span{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:3px}.soc-nf input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;background:#fff;color:var(--ink)}.soc-fa{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}" +
     ".soc-ai{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}.soc-gt{margin:0 0 6px;font:700 12.5px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}.soc-head{margin:0 0 10px;font:600 15.5px/1.4 'Space Grotesk',sans-serif}.soc-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}.soc-cols b,.soc-ideas b{font-size:12px;text-transform:uppercase;letter-spacing:.06em}.soc-cols b.g{color:#137a59}.soc-cols b.r{color:#a53a27}.soc-cols ul,.soc-ideas ol{margin:4px 0 0;padding-left:18px;font-size:13.5px;line-height:1.5}.soc-ideas{background:#FEF3E2;border-radius:12px;padding:12px 14px;margin-top:10px}.soc-line{margin:10px 0 0;font-size:13.5px}" +
+    ".soc-card{animation:socin .55s cubic-bezier(.2,.8,.2,1) both}.soc-card .soc-t{animation:soctp .5s cubic-bezier(.2,.9,.3,1.2) both}.soc-card .soc-t:nth-child(2){animation-delay:.12s}.soc-card .soc-t:nth-child(3){animation-delay:.24s}.soc-card .soc-cols,.soc-card .soc-ideas{animation:socin .6s .35s cubic-bezier(.2,.8,.2,1) both}" +
+    "@keyframes socin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes soctp{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}@keyframes socgrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}" +
+    ".soc-gr.up b,.soc-sumg.up b,.soc-sumg.up{color:#1D9E75}.soc-gr.dn b,.soc-sumg.dn b,.soc-sumg.dn{color:#C24A34}.soc-gr span{display:block}.soc-sumg{margin:14px 0 0;font-size:14px;font-weight:600;background:#faf8f5;border:1px solid var(--line);border-radius:12px;padding:10px 12px;animation:socin .5s both}" +
+    ".soc-tr{margin:14px 0 16px}.soc-trh{margin:0 0 6px;font:700 12px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}.soc-trb{display:flex;align-items:flex-end;gap:6px;height:112px}.soc-col{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;font-size:10.5px}.soc-col i{display:block;width:100%;max-width:34px;background:linear-gradient(180deg,#F69500,#f9b84d);border-radius:6px 6px 2px 2px;transform-origin:bottom;animation:socgrow .8s var(--d) cubic-bezier(.2,.8,.2,1) both}.soc-col em{font-style:normal;font-weight:700;font-size:10.5px;color:var(--ink-soft);min-height:13px;white-space:nowrap}.soc-col em.up{color:#1D9E75}.soc-col em.dn{color:#C24A34}.soc-col span{color:var(--ink-soft)}" +
     ".soc-load{display:flex;align-items:center;gap:6px;color:var(--ink-soft);font-size:13.5px}.soc-load span{width:8px;height:8px;border-radius:50%;background:var(--coral);animation:socb 1s infinite}.soc-load span:nth-child(2){animation-delay:.15s}.soc-load span:nth-child(3){animation-delay:.3s}@keyframes socb{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}" +
-    "@media(max-width:600px){.soc{padding:14px}.soc-cols{grid-template-columns:1fr}.soc-ago{flex-basis:100%;order:5}}@media(prefers-reduced-motion:reduce){.soc-ring .arc{transition:none}.soc-load span{animation:none}}";
+    "@media(max-width:600px){.soc{padding:14px}.soc-cols{grid-template-columns:1fr}.soc-ago{flex-basis:100%;order:5}}@media(prefers-reduced-motion:reduce){.soc-card,.soc-card .soc-t,.soc-card .soc-cols,.soc-card .soc-ideas,.soc-col i,.soc-sumg{animation:none!important}.soc-ring .arc{transition:none}.soc-load span{animation:none}}";
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
   window.__p2pSocial = { mount: mount, detect: detect };
 })();
