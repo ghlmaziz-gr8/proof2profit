@@ -12,7 +12,7 @@
   function addMonths(n) { var d = new Date(); d.setMonth(d.getMonth() + n); return d.toLocaleDateString("default", { month: "short", year: "numeric" }); }
 
   // Projection for one series [{t, v}] (oldest to newest) at a horizon in days.
-  function project(pts, horizon) {
+  function project(pts, horizon, adj) {
     var n = pts.length, last = pts[n - 1].v;
     var span = n > 1 ? Math.max(1, (pts[n - 1].t - pts[0].t) / DAY) : 0;
     var slope = 0, sd = 0;
@@ -26,11 +26,12 @@
     var heff = Math.min(horizon, Math.max(2 * span, 14));
     var cap = horizon <= 31 ? 10 : 25;
     var change = n > 1 ? clamp(slope * heff, -cap, cap) : 0;
-    var mid = clamp(Math.round(last + change), 0, 100);
+    adj = adj || {}; var mid = clamp(Math.round(last + change - (adj.erode || 0) + (adj.lift || 0)), 0, 100);
     var u = 4 + Math.sqrt(horizon / 30) * 3 + sd; u *= n < 3 ? 1.6 : n < 5 ? 1.3 : 1;
     u = Math.round(clamp(u, 3, 25));
-    return { mid: mid, lo: clamp(mid - u, 0, 100), hi: clamp(mid + u, 0, 100), change: mid - last, slope: slope, heff: Math.round(heff), span: Math.round(span), u: u, capped: n > 1 && Math.abs(slope * heff) > cap };
+    return { mid: mid, lo: clamp(mid - u, 0, 100), hi: clamp(mid + u, 0, 100), change: mid - last, erode: adj.erode || 0, lift: adj.lift || 0, trend: Math.round(change * 10) / 10, slope: slope, heff: Math.round(heff), span: Math.round(span), u: u, capped: n > 1 && Math.abs(slope * heff) > cap };
   }
+  function regress(pts) { var n = pts.length; if (n < 2) return 0; var xs = pts.map(function (p) { return (p.t - pts[0].t) / DAY; }), mx = xs.reduce(function (a, b) { return a + b; }, 0) / n, my = pts.reduce(function (a, p) { return a + p.v; }, 0) / n, nu = 0, de = 0; xs.forEach(function (x, i) { nu += (x - mx) * (pts[i].v - my); de += (x - mx) * (x - mx); }); return de > 0 ? nu / de : 0; }
   function confidence(n, span) { return n >= 6 && span >= 60 ? "High" : n >= 3 && span >= 14 ? "Medium" : "Low"; }
 
   function build(history, current) {
@@ -39,21 +40,40 @@
     var pts = rows.map(function (h) { return { t: h.ts, v: sc(h) }; });
     if (!pts.length) return null;
     var n = pts.length, span = n > 1 ? Math.round((pts[n - 1].t - pts[0].t) / DAY) : 0;
-    var m1 = project(pts, 30), m6 = project(pts, 182);
-    var names = [], seen = {};
     var latest = rows[rows.length - 1];
+    var momentum = n >= 3 && span >= 14 && regress(pts) > 0.02;
+    // Status quo: with no action, open complaints and the difficulty of holding a high score erode results over time.
+    function erode(now, nD, horizon, weak) { var e = 0.5 + 0.3 * Math.min(nD, 6) + (now >= 80 ? 0.5 : now >= 70 ? 0.25 : 0) + (weak ? 0.4 : 0); if (momentum) e *= 0.5; return Math.min(horizon <= 31 ? 6 : 16, e * Math.pow(horizon / 30, 0.85)); }
+    // With improvements: closing half the gap to 90 on the weaker half of the aspects; erosion falls to a quarter.
+    function lift(now, horizon) { return Math.max(0, (90 - now) * 0.5) * Math.pow(horizon / 182, 0.7); }
+    var nD = (latest.dislikes || []).length, names = [], seen = {};
     (latest.aspects || []).forEach(function (a) { if (a && a.name && !seen[a.name]) { seen[a.name] = 1; names.push(a.name); } });
     var asp = names.map(function (nm) {
       var ap = []; rows.forEach(function (h) { (h.aspects || []).forEach(function (a) { if (a && a.name === nm && !isNaN(a.score)) ap.push({ t: h.ts, v: Number(a.score) }); }); });
       if (!ap.length) return null;
-      return { name: nm, now: ap[ap.length - 1].v, n: ap.length, m1: project(ap, 30), m6: project(ap, 182) };
+      return { name: nm, now: ap[ap.length - 1].v, n: ap.length, pts: ap };
     }).filter(Boolean);
-    return { pts: pts, n: n, span: span, now: pts[n - 1].v, m1: m1, m6: m6, conf: confidence(n, span), asp: asp, latest: latest, rows: rows };
+    var order = asp.slice().sort(function (a, b) { return a.now - b.now; }), weakSet = {};
+    order.slice(0, Math.max(1, Math.ceil(asp.length / 2))).forEach(function (a) { weakSet[a.name] = 1; });
+    asp.forEach(function (a) {
+      var w = !!weakSet[a.name];
+      a.weak = w;
+      a.m1 = project(a.pts, 30, { erode: erode(a.now, w ? 3 : 1, 30, w) });
+      a.m6 = project(a.pts, 182, { erode: erode(a.now, w ? 3 : 1, 182, w) });
+      a.i6 = project(a.pts, 182, { erode: erode(a.now, w ? 3 : 1, 182, w) * 0.25, lift: w ? lift(a.now, 182) : 0 });
+    });
+    var l1 = asp.length ? asp.reduce(function (s, a) { return s + (a.weak ? lift(a.now, 30) : 0); }, 0) / asp.length : 2 * Math.pow(30 / 182, 0.7);
+    var l6 = asp.length ? asp.reduce(function (s, a) { return s + (a.weak ? lift(a.now, 182) : 0); }, 0) / asp.length : 3;
+    var now0 = pts[n - 1].v;
+    var m1 = project(pts, 30, { erode: erode(now0, nD, 30) }), m6 = project(pts, 182, { erode: erode(now0, nD, 182) });
+    var i1 = project(pts, 30, { erode: erode(now0, nD, 30) * 0.25, lift: l1 }), i6 = project(pts, 182, { erode: erode(now0, nD, 182) * 0.25, lift: l6 });
+    var weakNames = order.slice(0, 2).map(function (a) { return a.name; });
+    return { pts: pts, n: n, span: span, now: pts[n - 1].v, m1: m1, m6: m6, i1: i1, i6: i6, weak: weakNames, momentum: momentum, conf: confidence(n, span), asp: asp, latest: latest, rows: rows };
   }
 
   function chart(F) {
     var W = 640, H = 230, L = 36, R = 16, T = 18, B = 34;
-    var all = F.pts.map(function (p) { return p.v; }).concat([F.m1.lo, F.m1.hi, F.m6.lo, F.m6.hi]);
+    var all = F.pts.map(function (p) { return p.v; }).concat([F.m1.lo, F.m1.hi, F.m6.lo, F.m6.hi, F.i1.mid, F.i6.mid]);
     var lo = Math.floor((Math.min.apply(null, all) - 4) / 5) * 5, hi = Math.ceil((Math.max.apply(null, all) + 4) / 5) * 5; if (hi - lo < 20) { hi = lo + 20; }
     lo = Math.max(0, lo); hi = Math.min(100, Math.max(hi, lo + 20));
     var X = function (f) { return L + f * (W - L - R); }, Y = function (v) { return T + (1 - (v - lo) / (hi - lo)) * (H - T - B); };
@@ -62,6 +82,7 @@
     var hd = hist.map(function (p, i) { return (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ");
     var nowP = hist[hist.length - 1];
     var p1 = [X(m1X), Y(F.m1.mid)], p6 = [X(m6X), Y(F.m6.mid)];
+    var q1 = [X(m1X), Y(F.i1.mid)], q6 = [X(m6X), Y(F.i6.mid)], gd = "M" + nowP[0].toFixed(1) + "," + nowP[1].toFixed(1) + " L" + q1[0].toFixed(1) + "," + q1[1].toFixed(1) + " L" + q6[0].toFixed(1) + "," + q6[1].toFixed(1);
     var pd = "M" + nowP[0].toFixed(1) + "," + nowP[1].toFixed(1) + " L" + p1[0].toFixed(1) + "," + p1[1].toFixed(1) + " L" + p6[0].toFixed(1) + "," + p6[1].toFixed(1);
     var bandD = "M" + nowP[0].toFixed(1) + "," + nowP[1].toFixed(1) + " L" + X(m1X).toFixed(1) + "," + Y(F.m1.hi).toFixed(1) + " L" + X(m6X).toFixed(1) + "," + Y(F.m6.hi).toFixed(1) +
       " L" + X(m6X).toFixed(1) + "," + Y(F.m6.lo).toFixed(1) + " L" + X(m1X).toFixed(1) + "," + Y(F.m1.lo).toFixed(1) + " Z";
@@ -72,7 +93,7 @@
       '<line x1="' + nowP[0].toFixed(1) + '" x2="' + nowP[0].toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="3 4"/>' +
       '<path class="fc-band" d="' + bandD + '" fill="#F69500" fill-opacity=".14"/>' +
       (n > 1 ? '<path class="fc-hist" d="' + hd + '" fill="none" stroke="#F69500" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>' : "") + dots +
-      '<path class="fc-proj" d="' + pd + '" fill="none" stroke="#F69500" stroke-width="2.6" stroke-dasharray="7 6" stroke-linecap="round"/>' +
+      '<path class="fc-good" d="' + gd + '" fill="none" stroke="#1D9E75" stroke-width="2.4" stroke-dasharray="2 6" stroke-linecap="round"/><circle cx="' + q6[0].toFixed(1) + '" cy="' + q6[1].toFixed(1) + '" r="4.5" fill="#1D9E75"/><text x="' + (q6[0] - 2).toFixed(1) + '" y="' + (q6[1] - 10).toFixed(1) + '" text-anchor="end" font-size="12" font-weight="700" fill="#1D9E75">' + F.i6.mid + '</text><path class="fc-proj" d="' + pd + '" fill="none" stroke="#F69500" stroke-width="2.6" stroke-dasharray="7 6" stroke-linecap="round"/>' +
       '<circle class="fc-pt" cx="' + p1[0].toFixed(1) + '" cy="' + p1[1].toFixed(1) + '" r="5" fill="#fff" stroke="#F69500" stroke-width="2.5"/>' +
       '<circle class="fc-pt" cx="' + p6[0].toFixed(1) + '" cy="' + p6[1].toFixed(1) + '" r="5" fill="#fff" stroke="#F69500" stroke-width="2.5"/>' +
       '<text x="' + p1[0].toFixed(1) + '" y="' + (p1[1] - 11).toFixed(1) + '" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">' + F.m1.mid + "</text>" +
@@ -82,36 +103,37 @@
 
   function arrow(d) { return d > 1 ? '<span class="fc-up">▲ +' + d + "</span>" : d < -1 ? '<span class="fc-dn">▼ ' + d + "</span>" : '<span class="fc-fl">● steady</span>'; }
 
-  function explainScen(F, P, label, when) {
-    var basis = F.n === 1
-      ? "<p><b>Basis:</b> only one check-in exists, so there is no trend to follow. We hold today's score and show a wide range. Re-check this business over the coming weeks and the forecast becomes data-driven.</p>"
-      : "<p><b>Basis:</b> your " + F.n + " check-ins over " + F.span + " days are trending " + (P.slope > 0.02 ? "up" : P.slope < -0.02 ? "down" : "flat") + " by about <b>" + (Math.round(P.slope * 30 * 10) / 10) + " points per month</b>.</p><p><b>Calculation:</b> we continue that trend only as far as the history supports (up to twice the " + F.span + "-day span, at least 14 days), here <b>" + P.heff + " days</b>, then hold steady" + (P.capped ? ". The movement was capped so one fast swing does not produce an unrealistic number" : "") + ". Starting from today's <b>" + F.now + "</b> that gives <b>" + P.mid + "</b>.</p>";
-    ex(label + ": about " + P.mid + " out of 100",
-      "<p><b>What it means:</b> our best estimate of this business's average score around " + when + ", if guest feedback keeps moving the way it has.</p>" + basis +
-      "<p><b>Range " + P.lo + "–" + P.hi + ":</b> the farther ahead we look, and the fewer check-ins we have, the wider it gets. The real result will most likely land inside it.</p><p class='ex-note'>A forecast, not a guarantee. New reviews, seasons, staffing or menu changes can shift it.</p>");
+  function explainScen(F, P, label, when, Q) {
+    var basis = (F.n === 1 ? "<p><b>Basis:</b> only one check-in, so this is a modelled scenario rather than a measured trend.</p>" : "<p><b>Trend:</b> your " + F.n + " check-ins over " + F.span + " days move about <b>" + (Math.round(P.slope * 30 * 10) / 10) + " points per month</b> (counts " + (P.trend >= 0 ? "+" : "") + P.trend + " here).</p>") +
+      "<p><b>If nothing changes:</b> open complaints keep costing guests, and a high score is hard to hold, so we model an erosion of about <b>" + (Math.round(P.erode * 10) / 10) + " points</b>" + (F.momentum ? " (halved because your recent trend is upward)" : "") + ". This is a planning assumption, not a measurement.</p>" +
+      "<p><b>If you act:</b> closing half of the gap on your weakest areas (" + F.weak.map(esc).join(", ") + ") adds about <b>" + (Math.round(Q.lift * 10) / 10) + " points</b> and cuts the erosion to a quarter, landing near <b>" + Q.mid + "</b>.</p>";
+    ex(label + ": about " + P.mid + " if nothing changes, " + Q.mid + " with fixes",
+      "<p><b>What it means:</b> our estimate of this business's average score around " + when + " in two situations: you keep things as they are, or you fix the top issues.</p>" + basis +
+      "<p><b>Range " + P.lo + "–" + P.hi + ":</b> the farther ahead we look, and the fewer check-ins we have, the wider it gets.</p><p class='ex-note'>A planning scenario, not a guarantee.</p>");
   }
 
   function mount(el, opts) {
     var history = opts.history || [], F = build(history, opts.current || null);
     if (!el || !F) return;
     var slug = opts.slug, kvKey = "reviewlens_fc_" + slug, st = { ai: null };
-    function card(label, P, when, key) {
-      return '<button type="button" class="fc-scen" data-k="' + key + '"><span class="fc-sl">' + label + '</span><span class="fc-sv" style="color:' + colr(P.mid) + '"><b data-count="' + P.mid + '">' + (RM ? P.mid : 0) + '</b><small>/100</small></span><span class="fc-sr">likely ' + P.lo + "–" + P.hi + "</span><span class=\"fc-sd\">" + arrow(P.change) + " vs now · " + band(P.mid) + '</span><i class="fc-i">i</i></button>';
+    function card(label, P, Q, when, key) {
+      var gap = Q.mid - P.mid;
+      return '<button type="button" class="fc-scen" data-k="' + key + '"><span class="fc-sl">' + label + ' · if nothing changes</span><span class="fc-sv" style="color:' + colr(P.mid) + '"><b data-count="' + P.mid + '">' + (RM ? P.mid : 0) + '</b><small>/100</small></span><span class="fc-sr">likely ' + P.lo + "–" + P.hi + "</span><span class=\"fc-sd\">" + arrow(P.change) + " vs now · " + band(P.mid) + '</span><span class="fc-wf">✓ If you fix the top issues: <b>' + Q.mid + "</b>" + (gap > 0 ? " (+" + gap + ")" : "") + '</span><i class="fc-i">i</i></button>';
     }
     var aspHtml = F.asp.length ? '<div class="fc-asp"><p class="fc-sub">Where it is heading, by aspect</p>' + F.asp.map(function (a, i) {
-      return '<button type="button" class="fc-ar" data-a="' + i + '"><span class="n">' + esc(a.name) + '</span><span class="v">' + Math.round(a.now) + ' <i>→</i> ' + a.m1.mid + ' <i>→</i> ' + a.m6.mid + "</span>" + arrow(a.m6.mid - Math.round(a.now)) + "</button>";
+      return '<button type="button" class="fc-ar" data-a="' + i + '"><span class="n">' + esc(a.name) + '</span><span class="v">' + Math.round(a.now) + ' <i>→</i> ' + a.m1.mid + ' <i>→</i> ' + a.m6.mid + (a.weak ? ' <em class="fc-fx">fix: ' + a.i6.mid + "</em>" : "") + "</span>" + arrow(a.m6.mid - Math.round(a.now)) + "</button>";
     }).join("") + '<p class="fc-key">Now → +1 month → +6 months. Tap a row to see why.</p></div>' : "";
-    el.innerHTML = '<section class="fc"><div class="fc-top"><div><p class="fc-eyebrow">Forecast</p><h3>Next month and next 6 months</h3>' +
+    el.innerHTML = '<section class="fc"><div class="fc-top"><div><p class="fc-eyebrow">Forecast</p><h3>If nothing changes, and if you act</h3>' +
       '<p class="fc-meta">' + (F.n > 1 ? "Based on " + F.n + " check-ins over " + F.span + " days" : "Based on one check-in so far") + " · today " + Math.round(F.now) + '</p></div><button type="button" class="fc-conf ' + F.conf.toLowerCase() + '" data-k="conf">' + F.conf + ' confidence<i class="fc-i">i</i></button></div>' +
       '<div class="fc-chart">' + chart(F) + "</div>" +
-      (F.n === 1 ? '<p class="fc-flat">📍 <b>Not a prediction yet.</b> With a single check-in there is no trend to follow, so today\'s score is held steady and only the range widens. Re-check in a few weeks and these numbers will start moving with your real data.</p>' : "") + '<div class="fc-scens">' + card("Next month", F.m1, addMonths(1), "m1") + card("Next 6 months", F.m6, addMonths(6), "m6") + "</div>" + aspHtml +
+      '<p class="fc-flat">⚠️ <b>What is at stake: about ' + Math.max(0, F.now - F.m6.mid) + ' points over 6 months if nothing changes.</b> ' + (F.weak.length ? "The biggest openings are <b>" + F.weak.map(esc).join("</b> and <b>") + "</b>. " : "") + "Fixing them could recover most of it (green line). " + (F.n === 1 ? "With one check-in this is a modelled scenario, not a measured trend. " : "") + (F.momentum ? "Your recent upward momentum is already softening the drop. " : "") + '</p>' + '<div class="fc-scens">' + card("Next month", F.m1, F.i1, addMonths(1), "m1") + card("Next 6 months", F.m6, F.i6, addMonths(6), "m6") + "</div>" + aspHtml +
       '<div class="fc-ai" id="fcAi"></div></section>';
     var root = el.querySelector(".fc");
     el.querySelectorAll("[data-k]").forEach(function (b) {
       b.addEventListener("click", function () {
         var k = b.getAttribute("data-k");
-        if (k === "m1") explainScen(F, F.m1, "Next month", addMonths(1));
-        else if (k === "m6") explainScen(F, F.m6, "Next 6 months", addMonths(6));
+        if (k === "m1") explainScen(F, F.m1, "Next month", addMonths(1), F.i1);
+        else if (k === "m6") explainScen(F, F.m6, "Next 6 months", addMonths(6), F.i6);
         else ex("Confidence: " + F.conf, "<p><b>What it means:</b> how much to trust the projection.</p><p><b>How it is set:</b> <b>Low</b> under 3 check-ins or under 2 weeks of history. <b>Medium</b> 3+ check-ins across 2+ weeks. <b>High</b> 6+ check-ins across 2+ months.</p><p><b>Yours:</b> " + F.n + " check-in" + (F.n === 1 ? "" : "s") + " over " + F.span + " days = <b>" + F.conf + "</b>.</p><p>Re-checking regularly (for example every 2 weeks) is the quickest way to raise it.</p>");
       });
     });
@@ -152,10 +174,10 @@
         "You are explaining a review-based forecast for the business \"" + (opts.name || "this business") + "\"" + (opts.address ? " (" + opts.address + ")" : "") + ". Today is " + new Date().toLocaleDateString("default", { month: "long", day: "numeric", year: "numeric" }) + ".\n\n" +
         "Check-in history (average score 0-100 and aspect scores):\n" + hist + "\n\n" +
         "Latest things guests love: " + (L.likes || []).join("; ") + "\nLatest things guests complain about: " + (L.dislikes || []).join("; ") + "\n" + (newC.length ? "New concerns since the previous check: " + newC.join("; ") + "\n" : "") + "\n" +
-        "Our computed projection (do NOT change these numbers): today " + Math.round(F.now) + "; next month about " + F.m1.mid + " (range " + F.m1.lo + "-" + F.m1.hi + "); next 6 months about " + F.m6.mid + " (range " + F.m6.lo + "-" + F.m6.hi + "); confidence " + F.conf + " (" + F.n + " check-ins over " + F.span + " days).\n" +
+        "Our computed projection (do NOT change these numbers): today " + Math.round(F.now) + "; IF NOTHING CHANGES next month about " + F.m1.mid + " (range " + F.m1.lo + "-" + F.m1.hi + ") and next 6 months about " + F.m6.mid + " (range " + F.m6.lo + "-" + F.m6.hi + "); IF THEY ACT on the weakest areas (" + F.weak.join(", ") + ") next month about " + F.i1.mid + " and next 6 months about " + F.i6.mid + "; confidence " + F.conf + " (" + F.n + " check-ins over " + F.span + " days).\n" +
         "Aspect projections (now, +1 month, +6 months): " + F.asp.map(function (a) { return a.name + " " + Math.round(a.now) + "/" + a.m1.mid + "/" + a.m6.mid; }).join("; ") + ".\n\n" +
-        "Explain in plain language why the score is likely to move this way, grounded ONLY in the history and feedback above plus normal seasonality for this type of business. Do not invent review counts, ratings, or events. Be honest about uncertainty" + (F.n < 3 ? " (there is very little history, say so)" : "") + ".\n\n" +
-        '{"headline":"one sentence summing up the outlook","next_month":{"outlook":"2 sentences","drivers":["2-3 short items"],"risks":["2 short items"]},"next_6_months":{"outlook":"2 sentences","drivers":["2-3 short items"],"risks":["2 short items"]},"actions":["3 short, specific actions that would improve the forecast"],"seasonal_note":"one sentence on seasonality for this business type over the next 6 months"}';
+        "Our philosophy: every business has room to improve, so never paint a rosy picture. Treat the do-nothing path as the default outcome and say plainly what slips if the owner does not act; then show what acting changes. Do not praise the score as a reason to relax. Explain in plain language why the score is likely to move this way, grounded ONLY in the history and feedback above plus normal seasonality for this type of business. Do not invent review counts, ratings, or events. Be honest about uncertainty" + (F.n < 3 ? " (there is very little history, say so)" : "") + ".\n\n" +
+        '{"headline":"one sentence naming what is at risk if nothing changes and the main fix","next_month":{"outlook":"2 sentences","drivers":["2-3 short items"],"risks":["2 short items"]},"next_6_months":{"outlook":"2 sentences","drivers":["2-3 short items"],"risks":["2 short items"]},"actions":["3 short, specific actions, each naming the problem it fixes, that move the business from the do-nothing path to the improved path"],"seasonal_note":"one sentence on seasonality for this business type over the next 6 months"}';
     }
     function run(force) {
       aiBox.innerHTML = '<div class="fc-load"><span></span><span></span><span></span> Reading the trend…</div>';
@@ -184,7 +206,7 @@
     ".fc-chart{margin:12px 0 4px;color:var(--ink)}.fc-svg{width:100%;height:auto;display:block;overflow:visible}" +
     ".fc-hist{stroke-dasharray:1;stroke-dashoffset:1}.fc-in .fc-hist{animation:fcdraw 1.2s ease-out forwards}.fc-proj{stroke-dashoffset:0;opacity:0}.fc-in .fc-proj{animation:fcfade .6s 1s forwards}.fc-band{opacity:0}.fc-in .fc-band{animation:fcfade .8s 1.1s forwards}.fc-pt{opacity:0;transform-box:fill-box;transform-origin:center}.fc-in .fc-pt{animation:fcpop .4s 1.5s forwards}" +
     "@keyframes fcdraw{to{stroke-dashoffset:0}}@keyframes fcfade{to{opacity:1}}@keyframes fcpop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:none}}" +
-    ".fc-flat{background:#FEF3E2;color:#7a4a10;border-radius:10px;padding:10px 12px;margin:10px 0 0;font-size:13px;line-height:1.45}.fc-scens{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}.fc-scen{display:flex;flex-direction:column;gap:3px;text-align:left;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 30px 14px 14px;min-height:0;width:auto}.fc-scen:hover{background:linear-gradient(135deg,#24272d,#35291c)}" +
+    ".fc-flat{background:#FEF3E2;color:#7a4a10;border-radius:10px;padding:10px 12px;margin:10px 0 0;font-size:13px;line-height:1.45}.fc-wf{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.18);font-size:12.5px;color:#7fe0bd}.fc-wf b{font-size:15px}.fc-fx{font-style:normal;font-size:11.5px;color:#1D9E75;margin-left:6px}.fc-scens{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}.fc-scen{display:flex;flex-direction:column;gap:3px;text-align:left;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 30px 14px 14px;min-height:0;width:auto}.fc-scen:hover{background:linear-gradient(135deg,#24272d,#35291c)}" +
     ".fc-sl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#FFD35A;font-weight:700}.fc-sv b{font:700 34px 'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}.fc-sv small{font-size:12px;color:rgba(255,255,255,.6);margin-left:2px}.fc-sr{font-size:12.5px;color:rgba(255,255,255,.8)}.fc-sd{font-size:12px;color:rgba(255,255,255,.75)}" +
     ".fc-up{color:#5fe0b0;font-weight:700}.fc-dn{color:#ff8f7a;font-weight:700}.fc-fl{color:#BDB8AE;font-weight:600}.fc-asp{margin-top:16px}.fc-sub{margin:0 0 8px;font:700 13px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}" +
     ".fc-ar{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 4px;min-height:0;font-size:14px;text-align:left}.fc-ar:hover{background:rgba(246,149,0,.07)}.fc-ar .n{font-weight:600;flex:1 1 auto;min-width:0}.fc-ar .v{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}.fc-ar .v i{font-style:normal;opacity:.5}.fc-ar>span:last-child{min-width:70px;text-align:right}" +
