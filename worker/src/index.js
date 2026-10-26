@@ -92,23 +92,37 @@ function defaultEngine(env) {
   const p = PROVIDERS.gemini;
   return { provider: "gemini", kind: "gemini", base: p.base, model: env.GEMINI_MODEL || p.model, key: env.GEMINI_API_KEY, label: p.label, source: "default", grounding: true };
 }
-let engineCache = { at: 0, eng: null };
-async function activeEngine(env) {
-  if (engineCache.eng && Date.now() - engineCache.at < 60000) return engineCache.eng;
+const engineCache = new Map();
+function emailOf(token) {
+  try { return String(JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || "").toLowerCase(); } catch (e) { return ""; }
+}
+async function toEngine(env, c, source) {
+  if (!c || !PROVIDERS[c.provider]) return null;
+  const p = PROVIDERS[c.provider];
+  const key = c.key_enc ? await decKey(env, c.key_enc) : c.kind === "gemini" ? env.GEMINI_API_KEY : null;
+  const base = p.custom ? validBase(c.base_url) : p.base;
+  if (!key || !base || !c.model) return null;
+  return { provider: c.provider, kind: c.kind, base, model: c.model, key, label: p.label, source, grounding: c.kind === "gemini" };
+}
+// The user's own engine first, then the organisation default, then the platform's Gemini key.
+async function activeEngine(env, email) {
+  const ck = email || "";
+  const hit = engineCache.get(ck);
+  if (hit && Date.now() - hit.at < 60000) return hit.eng;
   let eng = defaultEngine(env);
   try {
     if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
-      const r = await sbRpc(env, "ai_config_get", { p_secret: env.OUTBOX_SECRET });
-      const c = r.ok ? r.data : null;
-      if (c && PROVIDERS[c.provider]) {
-        const p = PROVIDERS[c.provider];
-        const key = c.key_enc ? await decKey(env, c.key_enc) : c.kind === "gemini" ? env.GEMINI_API_KEY : null;
-        const base = p.custom ? validBase(c.base_url) : p.base;
-        if (key && base && c.model) eng = { provider: c.provider, kind: c.kind, base, model: c.model, key, label: p.label, source: "saved", grounding: c.kind === "gemini" };
+      const r = await sbRpc(env, "ai_engine_get", { p_secret: env.OUTBOX_SECRET, p_email: ck });
+      if (r.ok && r.data) {
+        let e = null;
+        try { e = await toEngine(env, r.data.mine, "mine"); } catch (x) { e = null; }
+        if (!e) { try { e = await toEngine(env, r.data.org, "org"); } catch (x) { e = null; } }
+        if (e) eng = e;
       }
     }
   } catch (e) { /* fall back to the default engine so the app keeps working */ }
-  engineCache = { at: Date.now(), eng };
+  engineCache.set(ck, { at: Date.now(), eng });
+  if (engineCache.size > 500) engineCache.clear();
   return eng;
 }
 function errText(data, raw) {
@@ -407,14 +421,14 @@ function parseJsonLoose(t) {
   t = String(t || "").replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try { return JSON.parse(t); } catch (e) { const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e2) {} } return null; }
 }
-async function socialAssess(env, input, hints) {
+async function socialAssess(env, input, hints, email) {
   const hf = hints && Number.isFinite(Number(hints.followers)) && Number(hints.followers) > 0 ? Number(hints.followers) : null;
   const hl = hints && Number.isFinite(Number(hints.avgLikes)) && Number(hints.avgLikes) >= 0 && hints.avgLikes !== "" && hints.avgLikes != null ? Number(hints.avgLikes) : null;
   const t = socialTarget(input);
   let direct = null;
   try { direct = await socialAudit(input); } catch (e) { direct = null; }
   const who = `${t.platform} profile @${t.handle} (${t.url})`;
-  const eng = await activeEngine(env);
+  const eng = await activeEngine(env, email);
   const g1 = eng.grounding ? await runAI(env, eng, { prompt: `Find what is publicly known about the ${who}. Report only what current web sources show: approximate follower count, how often it posts, typical likes/comments/views per post, content themes, recent activity, collaborations or press, and any signs the account is inactive. Give figures only when a source states them. If you find almost nothing, say so plainly.`, search: true, json: false, maxTokens: 1500, temperature: 0.2 }) : { status: 0, text: "", chunks: [] };
   const research = g1.status === 200 ? String(g1.text || "").trim() : "";
   const chunks = g1.chunks || [];
@@ -475,7 +489,7 @@ export default {
       if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
       if (u.error) return json({ error: "usage_check_failed" }, 502, h);
       if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
-      const eng = await activeEngine(env);
+      const eng = await activeEngine(env, emailOf(token));
       const g = await runAI(env, eng, { prompt, json: true, maxTokens: 4096, temperature: 0.4 });
       if (g.status === 429) return json({ error: "rate_limited" }, 429, h);
       if (g.status !== 200) return json({ error: "ai_error", message: g.error || "AI request failed" }, 502, h);
@@ -491,7 +505,7 @@ export default {
       const prompt =
         `${String(body.objective || "").slice(0, 600)}\n\nSearch for: ${queries.join(" | ")}\n\n` +
         "Summarise only what current web sources actually say: rating, review themes (praise and complaints), hours, menu or services, location. Be specific and factual. If you find nothing reliable, say so.";
-      const eng = await activeEngine(env);
+      const eng = await activeEngine(env, emailOf(token));
       if (!eng.grounding) return json({ payload: { results: [] } }, 200, h);
       const g = await runAI(env, eng, { prompt, search: true, json: false, maxTokens: 1500, temperature: 0.2 });
       if (g.status !== 200) return json({ payload: { results: [] } }, 200, h);
@@ -519,13 +533,15 @@ export default {
       }
     }
 
-    if (path.startsWith("/admin/ai/")) {
-      // Only admins and super users. The database function does the role check with the caller's own token.
-      const who = await sbRpc(env, "ai_config_info", {}, token);
+    if (path.startsWith("/ai/")) {
+      // Any signed-in, invited user can manage their own engine. Admins can also set the organisation default.
+      const who = await sbRpc(env, "ai_engine_info", {}, token);
       if (who.status === 401) return json({ error: "not_signed_in" }, 401, h);
-      if (!who.ok) return json({ error: "forbidden", message: "Only admins can change the AI engine." }, 403, h);
-      const saved = who.data || {};
-      const email = (() => { try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email || ""; } catch (e) { return ""; } })();
+      if (!who.ok || !who.data) return json({ error: "forbidden", message: "Your account is not set up for this." }, 403, h);
+      const me = who.data;
+      const scope = body.scope === "org" ? "org" : me.email;
+      if (scope === "org" && !me.is_admin && path !== "/ai/info") return json({ error: "forbidden", message: "Only admins can change the organisation default." }, 403, h);
+      const mineOrOrg = scope === "org" ? me.org : me.mine;
       const pick = async () => {
         const p = PROVIDERS[String(body.provider || "")];
         if (!p) return { error: "bad_config", message: "Pick an engine from the list." };
@@ -535,43 +551,46 @@ export default {
         if (p.custom) { base = validBase(String(body.base_url || "").trim()); if (!base) return { error: "bad_config", message: "Enter the engine's https address, like https://api.example.com/v1." }; }
         const kind = p.custom && ["openai", "anthropic", "gemini"].includes(body.kind) ? body.kind : p.kind;
         const typed = String(body.api_key || "").trim();
-        const keepable = saved.configured && saved.provider === body.provider && saved.has_key && (!p.custom || saved.base_url === base);
+        const keepable = mineOrOrg && mineOrOrg.provider === body.provider && mineOrOrg.has_key && (!p.custom || mineOrOrg.base_url === base);
         let key = typed || null;
         if (!key && keepable) key = "__keep__";
         if (!key && kind === "gemini") key = "__env__";
         if (!key) return { error: "key_required", message: "Paste this engine's API key." };
-        return { p, id: body.provider, kind, base, model, key, typed };
+        return { p, id: body.provider, kind, base, model, key };
       };
-      if (path === "/admin/ai/info") {
-        const eng = await activeEngine(env);
-        return json({ current: saved, active: { provider: eng.provider, label: eng.label, model: eng.model, source: eng.source, grounding: eng.grounding }, providers: publicProviders(), defaultModel: env.GEMINI_MODEL || PROVIDERS.gemini.model }, 200, h);
+      if (path === "/ai/info") {
+        const eng = await activeEngine(env, me.email);
+        return json({ email: me.email, is_admin: !!me.is_admin, mine: me.mine, org: me.org, active: { provider: eng.provider, label: eng.label, model: eng.model, source: eng.source, grounding: eng.grounding }, providers: publicProviders(), defaultModel: env.GEMINI_MODEL || PROVIDERS.gemini.model }, 200, h);
       }
-      if (path === "/admin/ai/reset") {
-        const r = await sbRpc(env, "ai_config_clear", { p_secret: env.OUTBOX_SECRET || "", p_by: email });
-        engineCache = { at: 0, eng: null };
+      if (path === "/ai/reset") {
+        const r = await sbRpc(env, "ai_engine_clear", { p_secret: env.OUTBOX_SECRET || "", p_scope: scope });
+        engineCache.clear();
         if (!r.ok) return json({ error: "audit_failed", message: "Could not reset." }, 502, h);
         return json({ ok: true }, 200, h);
       }
       const c = await pick();
       if (c.error) return json({ error: c.error, message: c.message }, 400, h);
-      if (path === "/admin/ai/test") {
+      if (path === "/ai/test") {
         let key = c.key;
         if (key === "__env__") key = env.GEMINI_API_KEY;
-        else if (key === "__keep__") { const cur = await sbRpc(env, "ai_config_get", { p_secret: env.OUTBOX_SECRET || "" }); try { key = await decKey(env, cur.data.key_enc); } catch (e) { key = null; } }
+        else if (key === "__keep__") {
+          const cur = await sbRpc(env, "ai_engine_get", { p_secret: env.OUTBOX_SECRET || "", p_email: me.email });
+          try { key = await decKey(env, (scope === "org" ? cur.data.org : cur.data.mine).key_enc); } catch (e) { key = null; }
+        }
         if (!key) return json({ ok: false, error: "No key available to test with." }, 200, h);
         const t0 = Date.now();
         const r = await runAI(env, { provider: c.id, kind: c.kind, base: c.base, model: c.model, key }, { prompt: 'Reply with only this JSON: {"ok":true,"engine":"say your model name"}', json: true, maxTokens: 60, temperature: 0 });
         if (r.status !== 200) return json({ ok: false, status: r.status, error: r.error || "The engine did not accept the request." }, 200, h);
         return json({ ok: true, ms: Date.now() - t0, sample: String(r.text || "").slice(0, 160) }, 200, h);
       }
-      if (path === "/admin/ai/save") {
+      if (path === "/ai/save") {
         if (!env.OUTBOX_SECRET) return json({ error: "audit_failed", message: "The Worker is missing its OUTBOX_SECRET." }, 500, h);
         const keep = c.key === "__keep__", noKey = c.key === "__env__";
         const enc = keep || noKey ? null : await encKey(env, c.key);
         const last4 = keep || noKey ? null : c.key.slice(-4);
-        const r = await sbRpc(env, "ai_config_put", { p_secret: env.OUTBOX_SECRET, p_provider: c.id, p_kind: c.kind, p_base_url: c.p.custom ? c.base : null, p_model: c.model, p_key_enc: enc, p_key_last4: last4, p_keep_key: keep, p_by: email });
-        engineCache = { at: 0, eng: null };
-        if (!r.ok) return json({ error: "audit_failed", message: "Could not save. Run supabase/ai_config.sql first." }, 502, h);
+        const r = await sbRpc(env, "ai_engine_put", { p_secret: env.OUTBOX_SECRET, p_scope: scope, p_provider: c.id, p_kind: c.kind, p_base_url: c.p.custom ? c.base : null, p_model: c.model, p_key_enc: enc, p_key_last4: last4, p_keep_key: keep, p_by: me.email });
+        engineCache.clear();
+        if (!r.ok) return json({ error: "audit_failed", message: "Could not save. Run supabase/ai_engines.sql first." }, 502, h);
         return json({ ok: true }, 200, h);
       }
       return json({ error: "not_found" }, 404, h);
@@ -583,7 +602,7 @@ export default {
       if (u.error) return json({ error: "usage_check_failed" }, 502, h);
       if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
       try {
-        return json({ result: await socialAssess(env, body.url, { followers: body.followers, avgLikes: body.avgLikes }) }, 200, h);
+        return json({ result: await socialAssess(env, body.url, { followers: body.followers, avgLikes: body.avgLikes }, emailOf(token)) }, 200, h);
       } catch (e) {
         const code = e && e.code ? e.code : "audit_failed";
         return json({ error: code, message: (e && e.message) || "" }, code === "rate_limited" ? 429 : code === "no_data" ? 422 : code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);

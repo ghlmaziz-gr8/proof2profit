@@ -57,7 +57,7 @@
       api("/social-assess", { url: pr.url, followers: pr.hf == null ? undefined : pr.hf, avgLikes: pr.hl == null ? undefined : pr.hl }).then(function (r) {
         var R = r.result; pr.busy = false;
         if (!R || !R.report) throw { code: "no_data" };
-        pr.report = R.report; pr.direct = R.direct; pr.sources = R.sources || []; pr.ts = Date.now();
+        pr.report = R.report; pr.engine = R.engine || null; pr.direct = R.direct; pr.sources = R.sources || []; pr.ts = Date.now();
         var sn2 = (pr.snaps || []).concat([{ ts: pr.ts, score: R.report.score, followers: R.report.followers }]); pr.snaps = window.__p2pPruneMonthly ? window.__p2pPruneMonthly(sn2, 24) : sn2.slice(-24);
         persist(); draw();
       }).catch(function (e) {
@@ -101,7 +101,7 @@
         '<div class="soc-cols"><div><b class="g">What is working</b><ul>' + list(R.strengths) + '</ul></div><div><b class="r">Gaps to close</b><ul>' + list(R.gaps) + '</ul></div></div>' +
         '<div class="soc-ideas"><b>Post ideas</b><ol>' + list(R.content_ideas) + '</ol></div>' +
         (R.posting_plan ? '<p class="soc-line">🎯 ' + esc(R.posting_plan) + '</p>' : '') +
-        '<p class="soc-fine">' + esc(R.evidence_note || "") + ' AI-written from public information, so treat figures as estimates.' + (pr.sources && pr.sources.length ? ' Sources: ' + esc(pr.sources.join(", ")) + '.' : '') + '</p>' +
+        '<p class="soc-fine">' + esc(R.evidence_note || "") + ' AI-written' + (pr.engine ? ' by ' + esc(pr.engine) : '') + ' from public information, so treat figures as estimates.' + (pr.sources && pr.sources.length ? ' Sources: ' + esc(pr.sources.join(", ")) + '.' : '') + '</p>' +
         (pr.snaps && pr.snaps.length > 1 ? '<p class="soc-fine">History: ' + pr.snaps.slice(-8).reverse().map(function (x) { return new Date(x.ts).toLocaleDateString("default", { month: "short", year: "2-digit" }) + " <b>" + x.score + "</b>"; }).join(" · ") + '</p>' : '') + '<div class="soc-fa"><button type="button" class="soc-go ghost sm" data-re="' + id + '"' + (pr.busy ? " disabled" : "") + '>' + (pr.busy ? "Re-assessing…" : "Re-assess") + '</button></div>';
       return '<div class="soc-card">' + h + '</div>';
     }

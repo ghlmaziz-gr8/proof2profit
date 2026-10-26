@@ -130,7 +130,7 @@
       var box = out.querySelector("#seoAi"); if (!box) return;
       function list(a) { return (a || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join(""); }
       function show(d) {
-        box.innerHTML = '<p class="seo-gt">AI action plan</p><p class="seo-head">' + esc(d.headline || "") + '</p><div class="seo-cols"><div><b>Quick wins (this week)</b><ol>' + list(d.quick_wins) + "</ol></div><div><b>This month</b><ol>" + list(d.this_month) + "</ol></div></div>" + ((d.local_tips || []).length ? "<div class=\"seo-tips\"><b>Local search tips</b><ul>" + list(d.local_tips) + "</ul></div>" : "") + '<p class="seo-fine">AI-written from the check results above' + (d.__ts ? " · written " + fmtD(d.__ts) : "") + '.</p>';
+        box.innerHTML = '<p class="seo-gt">AI action plan</p><p class="seo-head">' + esc(d.headline || "") + '</p><div class="seo-cols"><div><b>Quick wins (this week)</b><ol>' + list(d.quick_wins) + "</ol></div><div><b>This month</b><ol>" + list(d.this_month) + "</ol></div></div>" + ((d.local_tips || []).length ? "<div class=\"seo-tips\"><b>Local search tips</b><ul>" + list(d.local_tips) + "</ul></div>" : "") + '<p class="seo-fine">AI-written from the check results above' + (d.__ts ? " · written " + fmtD(d.__ts) : "") + (d._engine ? " by " + esc(d._engine) : "") + '.</p>';
       }
       if (storedAi && storedAi.headline) { show(storedAi); return; }
       box.innerHTML = '<button type="button" class="seo-go ghost">✨ Create an AI action plan</button><p class="seo-fine">Turns the findings into a prioritised to-do list. Uses one AI request.</p>';

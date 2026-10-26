@@ -785,6 +785,7 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
     throw new Error('NEEDS_INFO: ' + query);
   }
   parsed._grounded = !!groundingText;
+  parsed._engine = window.__p2pLastEngine || null;
   // A star rating and review total are only shown when they came from real search results.
   // Without them the AI is just recalling from memory, and a remembered number can be wrong.
   const rt = Number(parsed.rating), rc = String(parsed.review_count == null ? '' : parsed.review_count).trim();
@@ -987,7 +988,8 @@ async function saveBusinessSnapshot(data){
     aspects: data.aspects || [],
     likes: data.likes || [],
     dislikes: data.dislikes || [],
-    suggestions: data.suggestions || []
+    suggestions: data.suggestions || [],
+    engine: data._engine || null
   });
   const kept = window.__p2pPruneMonthly ? window.__p2pPruneMonthly(history, 24) : history.slice(-24);
   const histOk = await storageSetJSON('reviewlens_hist_' + slug, kept);
@@ -1041,7 +1043,14 @@ function computeBestAndDiff(history){
 
 function fcOpts(extra){
   return Object.assign({
-    ai: p => sampleCap.json(p, { modelTier: 'default', cache: false }).catch(e => { throw mapSampleError(e); }),
+    ai: async p => {
+      let r;
+      try{ r = await sampleCap.json(p, { modelTier: 'default', cache: false }); }catch(e){ throw mapSampleError(e); }
+      const eng = window.__p2pLastEngine || null;
+      if(typeof r === 'string'){ try{ r = safeJsonParse(r); }catch(e){ return r; } }
+      if(r && typeof r === 'object' && eng) r._engine = eng;
+      return r;
+    },
     parse: t => { try{ return safeJsonParse(t); }catch(e){ return null; } },
     save: (k, v) => storageSetJSON(k, v), load: (k, f) => storageGetJSON(k, f), isLimit: isLimitError
   }, extra);
@@ -1093,6 +1102,7 @@ async function renderSavedDetail(slug){
   detailWrap.innerHTML = `
     <p class="back-link" id="backToList">‹ All businesses</p>
     ${window.__p2pMy ? window.__p2pMy.hero(biz, history) : ''}
+    ${(history[history.length - 1] && history[history.length - 1].engine) ? `<p class="p2p-eng" style="margin:8px 4px 0;">✨ Latest assessment by <b>${escHtml(history[history.length - 1].engine)}</b></p>` : ''}
     <div class="card">
       ${window.__p2pMy ? '' : `<p class="detail-name">${escHtml(biz.name)}</p><p class="detail-meta">${escHtml(biz.address || '')} · ${history.length} check-in${history.length !== 1 ? 's' : ''}</p>`}
       ${buildTrendLine(history)}
@@ -1204,6 +1214,7 @@ function renderReport(data){
     <div class="card">
       <p class="biz-name">${data.name || 'Unknown business'}${data._grounded ? ' <span class="best-badge" style="vertical-align:middle;">Live search</span>' : ''}</p>
       <p class="biz-addr">${data.address || ''}</p>
+      ${data._engine ? `<p class="p2p-eng">✨ Assessed by <b>${escHtml(data._engine)}</b></p>` : ''}
       ${contactHtml(data)}
 
       <div class="stat-grid">

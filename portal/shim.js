@@ -92,7 +92,7 @@ window.__p2pPruneMonthly = function (arr, max) {
 
   var sample = function (input) {
     var prompt = typeof input === "string" ? input : JSON.stringify(input);
-    return api("/sample", { prompt: prompt });
+    return api("/sample", { prompt: prompt }).then(function (r) { window.__p2pLastEngine = (r && r.engine) || null; return r; });
   };
   sample.json = function (input) {
     return sample(input).then(function (r) {

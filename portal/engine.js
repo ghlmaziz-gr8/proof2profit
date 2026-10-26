@@ -1,6 +1,6 @@
-/* Admin: choose which AI engine runs every assessment. Keys go to the Worker, are encrypted there and are never shown again. */
+/* Choose which AI engine runs your assessments. Keys go to the Worker, are encrypted there and are never shown again. Admins can also set the organisation default. */
 (function () {
-  var dlg, S = { info: null, providers: [], cur: null };
+  var dlg, S = { info: null, providers: [], cur: null, scope: "me" };
   function el(t, a, txt) { var e = document.createElement(t); if (a) Object.keys(a).forEach(function (k) { if (a[k] !== false && a[k] != null) e.setAttribute(k, a[k]); }); if (txt != null) e.textContent = txt; return e; }
   function api(p, b) { return window.__p2p.api(p, b || {}); }
   function prov(id) { return S.providers.filter(function (p) { return p.id === id; })[0]; }
@@ -8,15 +8,23 @@
 
   function build() {
     dlg.textContent = "";
-    var cur = S.cur || {}, act = S.info && S.info.active || {};
+    var inf = S.info || {}, act = inf.active || {};
+    var cur = (S.scope === "org" ? inf.org : inf.mine) || {}; cur.configured = !!(S.scope === "org" ? inf.org : inf.mine);
     var body = el("div", { class: "p2x-body" });
-    body.appendChild(el("h3", null, "AI engine"));
-    body.appendChild(el("p", { class: "p2x-note" }, "Every assessment (review analysis, forecast, SEO plan, social report) runs on the engine you pick here. Applies to everyone using the platform."));
+    body.appendChild(el("h3", null, "My AI engine"));
+    body.appendChild(el("p", { class: "p2x-note" }, "Your assessments (review analysis, forecast, SEO plan, social report) run on the engine you pick here, using your own API key. Each result shows which engine wrote it."));
     var now = el("p", { class: "p2x-note", style: "background:#f9fafb;border-radius:10px;padding:10px 12px" });
     now.appendChild(el("b", null, "In use now: "));
-    now.appendChild(document.createTextNode((act.label || "Google Gemini") + " · " + (act.model || "") + (act.source === "default" ? " (platform default)" : "")));
-    if (cur.updated_by && cur.configured) now.appendChild(document.createTextNode(" · set by " + cur.updated_by + " " + fmt(cur.updated_at)));
+    now.appendChild(document.createTextNode((act.label || "Google Gemini") + " · " + (act.model || "") + (act.source === "default" ? " (platform default)" : act.source === "org" ? " (organisation default)" : " (your own)")));
     body.appendChild(now);
+    if (inf.is_admin) {
+      var scopeSel = el("select", { "aria-label": "Apply to" });
+      scopeSel.appendChild(el("option", { value: "me" }, "Just me"));
+      scopeSel.appendChild(el("option", { value: "org" }, "Everyone without their own (organisation default)"));
+      scopeSel.value = S.scope;
+      var ls = el("label", null, "Apply to"); ls.appendChild(scopeSel); body.appendChild(ls);
+      scopeSel.addEventListener("change", function () { S.scope = scopeSel.value; build(); });
+    }
 
     var sel = el("select", { "aria-label": "AI engine" });
     S.providers.forEach(function (p) { sel.appendChild(el("option", { value: p.id }, p.label)); });
@@ -40,7 +48,7 @@
     var key = el("input", { type: "password", autocomplete: "new-password", spellcheck: "false", placeholder: "" });
     var lk = el("label", null, "API key"); lk.appendChild(key); body.appendChild(lk);
     var keyHint = el("p", { class: "p2x-note" }); body.appendChild(keyHint);
-    body.appendChild(el("p", { class: "p2x-note" }, "Your key is encrypted on the server and is never shown again. Review and business text is sent to the engine you choose, so pick one you are comfortable with. Billing happens on your account with that provider."));
+    body.appendChild(el("p", { class: "p2x-note" }, "Your key is encrypted on the server and is never shown again. Your business and review text is sent to the engine you choose, so pick one you are comfortable with. Billing happens on your account with that provider. If you set nothing, the platform default (Google Gemini) is used."));
     var warn = el("p", { class: "p2x-note", style: "color:#92400e" });
     body.appendChild(warn);
     var msg = el("p", { class: "p2x-msg", "aria-live": "polite" }); body.appendChild(msg);
@@ -62,10 +70,10 @@
     fmtSel.addEventListener("change", function () { sync(true); });
     sync(true);
 
-    function payload() { return { provider: sel.value, model: model.value.trim(), base_url: base.value.trim(), kind: fmtSel.value, api_key: key.value.trim() }; }
+    function payload() { return { scope: S.scope, provider: sel.value, model: model.value.trim(), base_url: base.value.trim(), kind: fmtSel.value, api_key: key.value.trim() }; }
     function busy(on, t) { [bt, bs, br].forEach(function (b) { b.disabled = on; }); if (t) { msg.style.color = "#6b7280"; msg.textContent = t; } }
     var row = el("div", { class: "p2x-row" });
-    var br = el("button", { class: "p2x-btn ghost", type: "button" }, "Use platform default");
+    var br = el("button", { class: "p2x-btn ghost", type: "button" }, S.scope === "org" ? "Remove default" : "Use the default");
     var bt = el("button", { class: "p2x-btn ghost", type: "button" }, "Test");
     var bs = el("button", { class: "p2x-btn", type: "button" }, "Save");
     var bc = el("button", { class: "p2x-btn ghost", type: "button" }, "Close");
@@ -74,7 +82,7 @@
     function fail(e) { msg.style.color = "#b91c1c"; msg.textContent = (e && e.message) || "Something went wrong."; }
     bt.addEventListener("click", function () {
       busy(true, "Testing the connection…");
-      api("/admin/ai/test", payload()).then(function (r) {
+      api("/ai/test", payload()).then(function (r) {
         busy(false);
         if (r.ok) { msg.style.color = "#047857"; msg.textContent = "Connected. The engine answered in " + (r.ms || 0) + " ms."; }
         else { msg.style.color = "#b91c1c"; msg.textContent = "Not working: " + (r.error || "no answer") + (r.status ? " (" + r.status + ")" : ""); }
@@ -82,25 +90,26 @@
     });
     bs.addEventListener("click", function () {
       busy(true, "Saving…");
-      api("/admin/ai/save", payload()).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = "Saved. All new assessments use this engine."; } })
+      api("/ai/save", payload()).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = "Saved. Your new assessments use this engine."; } })
         .catch(function (e) { busy(false); fail(e); });
     });
     br.addEventListener("click", function () {
       busy(true, "Resetting…");
-      api("/admin/ai/reset", {}).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = "Back to the platform default (Google Gemini)."; } })
+      api("/ai/reset", {}).then(function () { return load(); }).then(function () { build(); var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#047857"; m.textContent = "Done. Using the default engine again."; } })
         .catch(function (e) { busy(false); fail(e); });
     });
     dlg.appendChild(body);
   }
-  function load() { return api("/admin/ai/info", {}).then(function (r) { S.info = r; S.providers = r.providers || []; S.cur = r.current || {}; }); }
+  function load() { return api("/ai/info", {}).then(function (r) { S.info = r; S.providers = r.providers || []; }); }
   function open() {
+    S.scope = "me";
     if (!dlg) { dlg = el("dialog", { class: "p2x-modal" }); document.body.appendChild(dlg); }
     dlg.textContent = ""; dlg.appendChild(el("div", { class: "p2x-body" }, "Loading…"));
     if (!dlg.open) dlg.showModal();
-    load().then(build).catch(function (e) { dlg.textContent = ""; var b = el("div", { class: "p2x-body" }); b.appendChild(el("h3", null, "AI engine")); b.appendChild(el("p", { class: "p2x-note" }, (e && e.code === "forbidden") ? e.message : "Could not load the AI engine settings. Update the Worker and run supabase/ai_config.sql, then try again.")); var c = el("button", { class: "p2x-btn ghost", type: "button" }, "Close"); c.addEventListener("click", function () { dlg.close(); }); b.appendChild(c); dlg.appendChild(b); });
+    load().then(build).catch(function (e) { dlg.textContent = ""; var b = el("div", { class: "p2x-body" }); b.appendChild(el("h3", null, "My AI engine")); b.appendChild(el("p", { class: "p2x-note" }, (e && e.code === "forbidden") ? e.message : "Could not load the AI engine settings. Try again in a moment.")); var c = el("button", { class: "p2x-btn ghost", type: "button" }, "Close"); c.addEventListener("click", function () { dlg.close(); }); b.appendChild(c); dlg.appendChild(b); });
   }
   var st = document.createElement("style");
-  st.textContent = ".p2x-body input[type=password]{padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;background:#fff;color:#1f2430;min-width:0}.p2x-modal{overflow-y:auto}";
+  st.textContent = ".p2x-body input[type=password]{padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;background:#fff;color:#1f2430;min-width:0}.p2x-modal{overflow-y:auto}.p2p-eng{margin:2px 0 8px;font-size:12.5px;color:var(--ink-soft)}.p2p-eng b{color:var(--ink);font-weight:600}";
   document.head.appendChild(st);
   window.__p2pEngine = { open: open };
 })();

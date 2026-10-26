@@ -137,7 +137,7 @@
         hz("Next month", d.next_month) + hz("Next 6 months", d.next_6_months) +
         ((d.actions || []).length ? '<div class="fc-act"><b>Do this now to improve the forecast</b><ol>' + list(d.actions) + "</ol></div>" : "") +
         (d.seasonal_note ? '<p class="fc-season">🗓 ' + esc(d.seasonal_note) + "</p>" : "") +
-        '<p class="fc-fine">AI-written explanation of the numbers above' + (cachedTs ? " · generated " + fmtD(cachedTs) : "") + ". It is a forecast, not a guarantee." + (basedN != null && basedN !== F.n ? " Written when there " + (basedN === 1 ? "was 1 check-in" : "were " + basedN + " check-ins") + "; there " + (F.n === 1 ? "is now 1" : "are now " + F.n) + ". Tap Refresh to update it." : "") + "</p>";
+        '<p class="fc-fine">AI-written explanation of the numbers above' + (cachedTs ? " · generated " + fmtD(cachedTs) : "") + (d._engine ? " by " + esc(d._engine) : "") + ". It is a forecast, not a guarantee." + (basedN != null && basedN !== F.n ? " Written when there " + (basedN === 1 ? "was 1 check-in" : "were " + basedN + " check-ins") + "; there " + (F.n === 1 ? "is now 1" : "are now " + F.n) + ". Tap Refresh to update it." : "") + "</p>";
       aiBox.querySelector(".fc-refresh").addEventListener("click", function () { run(true); });
     }
     function btn() {
