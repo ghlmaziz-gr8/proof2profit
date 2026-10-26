@@ -61,7 +61,7 @@
     if (last.kind !== "single" || !last.a || typeof window.slugify !== "function") return Promise.resolve(null);
     var sg = window.slugify(last.a.name);
     return Promise.all([kv("reviewlens_fc_" + sg), kv("reviewlens_seo_" + sg), kv("reviewlens_social_" + sg)]).then(function (r) {
-      var fc = r[0] && r[0].d, seo = r[1], soc = r[2], x = {};
+      var fc = r[0] && r[0].v === 2 && r[0].d, seo = r[1], soc = r[2], x = {};
       if (fc) x.forecast = { headline: t(fc.headline, 200), next_month: t(fc.next_month && fc.next_month.outlook, 400), next_6_months: t(fc.next_6_months && fc.next_6_months.outlook, 400), actions: (fc.actions || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(fc._engine, 80) };
       if (seo && seo.score != null) x.seo = { score: Number(seo.score) || 0, url: t(seo.url, 120), headline: t(seo.ai && seo.ai.headline, 200), quick_wins: ((seo.ai && seo.ai.quick_wins) || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(seo.ai && seo.ai._engine, 80) };
       var ps = (soc && soc.profiles || []).filter(function (p) { return p && p.report; }).slice(0, 4);

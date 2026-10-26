@@ -57,7 +57,7 @@
   function olist(a) { return (a || []).length ? "<ol>" + a.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ol>" : ""; }
   function get(key) { var g = window.storageGetJSON; return typeof g === "function" ? g(key, null).catch(function () { return null; }) : Promise.resolve(null); }
   function forecastCard(rec) {
-    var d = rec && rec.d; if (!d) return "";
+    var d = rec && rec.v === 2 && rec.d; if (!d) return "";
     function hz(t, o) { o = o || {}; return o.outlook ? "<h3>" + t + "</h3><p>" + esc(o.outlook) + "</p>" + ((o.drivers || []).length ? '<p class="g"><b>Likely drivers</b></p><ul>' + li(o.drivers) + "</ul>" : "") + ((o.risks || o.watch || []).length ? '<p class="r"><b>Watch out for</b></p><ul>' + li(o.risks || o.watch) + "</ul>" : "") : ""; }
     return '<div class="card"><h2>Forecast · AI outlook</h2>' + (d.headline ? "<p><b>" + esc(d.headline) + "</b></p>" : "") + hz("Next month", d.next_month) + hz("Next 6 months", d.next_6_months) +
       ((d.actions || []).length ? "<h3>Do this now</h3>" + olist(d.actions) : "") + (d.seasonal_note ? "<p><i>" + esc(d.seasonal_note) + "</i></p>" : "") +

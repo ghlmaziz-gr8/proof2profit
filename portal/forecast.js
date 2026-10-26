@@ -185,7 +185,7 @@
         var d = (r && typeof r === "object") ? r : (opts.parse ? opts.parse(String(r)) : null);
         if (!d || !d.headline) throw new Error("bad");
         st.ai = d; renderAi(d, Date.now());
-        if (opts.save && F.n >= 1) opts.save(kvKey, { n: F.n, ts: Date.now(), d: d });
+        if (opts.save && F.n >= 1) opts.save(kvKey, { n: F.n, ts: Date.now(), d: d, v: 2 });
       }).catch(function (e) {
         var lim = opts.isLimit && opts.isLimit(e);
         aiBox.innerHTML = '<p class="fc-err">' + (lim ? "You have reached today's AI limit. It resets daily." : "Could not generate the AI outlook just now.") + '</p><button type="button" class="fc-go">Try again</button>';
@@ -194,7 +194,7 @@
     }
     btn();
     if (opts.load) Promise.resolve(opts.load(kvKey, null)).then(function (c) {
-      if (c && c.d) renderAi(c.d, c.ts, c.n);
+      if (c && c.d && c.v === 2) renderAi(c.d, c.ts, c.n);
     }).catch(function () { });
   }
 
@@ -206,7 +206,7 @@
     ".fc-chart{margin:12px 0 4px;color:var(--ink)}.fc-svg{width:100%;height:auto;display:block;overflow:visible}" +
     ".fc-hist{stroke-dasharray:1;stroke-dashoffset:1}.fc-in .fc-hist{animation:fcdraw 1.2s ease-out forwards}.fc-proj{stroke-dashoffset:0;opacity:0}.fc-in .fc-proj{animation:fcfade .6s 1s forwards}.fc-band{opacity:0}.fc-in .fc-band{animation:fcfade .8s 1.1s forwards}.fc-pt{opacity:0;transform-box:fill-box;transform-origin:center}.fc-in .fc-pt{animation:fcpop .4s 1.5s forwards}" +
     "@keyframes fcdraw{to{stroke-dashoffset:0}}@keyframes fcfade{to{opacity:1}}@keyframes fcpop{from{opacity:0;transform:scale(0)}to{opacity:1;transform:none}}" +
-    ".fc-flat{background:#FEF3E2;color:#7a4a10;border-radius:10px;padding:10px 12px;margin:10px 0 0;font-size:13px;line-height:1.45}.fc-wf{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.18);font-size:12.5px;color:#7fe0bd}.fc-wf b{font-size:15px}.fc-fx{font-style:normal;font-size:11.5px;color:#1D9E75;margin-left:6px}.fc-scens{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}.fc-scen{display:flex;flex-direction:column;gap:3px;text-align:left;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 30px 14px 14px;min-height:0;width:auto}.fc-scen:hover{background:linear-gradient(135deg,#24272d,#35291c)}" +
+    ".fc-flat{background:#FEF3E2;color:#7a4a10;border-radius:10px;padding:10px 12px;margin:10px 0 0;font-size:13px;line-height:1.45}.fc-wf{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.18);font-size:12.5px;color:#7fe0bd}.fc-wf b{font-size:15px}.fc-fx{font-style:normal;font-size:11.5px;color:#1D9E75;margin-left:6px}.fc-scens{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;margin-top:10px}.fc-scen{min-width:0;box-sizing:border-box}.fc-sl{white-space:normal;overflow-wrap:anywhere;letter-spacing:.06em!important;line-height:1.35}.fc-wf{overflow-wrap:anywhere}.fc-scen{display:flex;flex-direction:column;gap:3px;text-align:left;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 30px 14px 14px;min-height:0;width:auto}.fc-scen:hover{background:linear-gradient(135deg,#24272d,#35291c)}" +
     ".fc-sl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#FFD35A;font-weight:700}.fc-sv b{font:700 34px 'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}.fc-sv small{font-size:12px;color:rgba(255,255,255,.6);margin-left:2px}.fc-sr{font-size:12.5px;color:rgba(255,255,255,.8)}.fc-sd{font-size:12px;color:rgba(255,255,255,.75)}" +
     ".fc-up{color:#5fe0b0;font-weight:700}.fc-dn{color:#ff8f7a;font-weight:700}.fc-fl{color:#BDB8AE;font-weight:600}.fc-asp{margin-top:16px}.fc-sub{margin:0 0 8px;font:700 13px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}" +
     ".fc-ar{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:transparent;color:var(--ink);border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 4px;min-height:0;font-size:14px;text-align:left}.fc-ar:hover{background:rgba(246,149,0,.07)}.fc-ar .n{font-weight:600;flex:1 1 auto;min-width:0}.fc-ar .v{font-variant-numeric:tabular-nums;color:var(--ink-soft);white-space:nowrap}.fc-ar .v i{font-style:normal;opacity:.5}.fc-ar>span:last-child{min-width:70px;text-align:right}" +
