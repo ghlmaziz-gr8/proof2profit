@@ -1032,6 +1032,14 @@ function fcOpts(extra){
   }, extra);
 }
 
+async function savedOverall(slug, history){
+  try{
+    const l = history && history[history.length - 1]; if(!l || !window.__p2pOverall) return null;
+    const [seo, soc] = await Promise.all([storageGetJSON('reviewlens_seo_' + slug, null), storageGetJSON('reviewlens_social_' + slug, null)]);
+    const c = window.__p2pOverall.compute({ aspects: l.aspects || [], rating: l.rating }, seo, soc);
+    return c ? c.score : null;
+  }catch(e){ return null; }
+}
 async function renderSavedList(){
   const wrap = document.getElementById('savedListWrap');
   document.getElementById('savedDetailWrap').innerHTML = '';
@@ -1044,6 +1052,7 @@ async function renderSavedList(){
     return;
   }
   const items = await Promise.all(index.map(async b => ({ slug: b.slug, name: b.name, address: b.address, history: await storageGetJSON('reviewlens_hist_' + b.slug, []) })));
+  await Promise.all(items.map(async it => { it.ov = await savedOverall(it.slug, it.history); }));
   const My = window.__p2pMy;
   if(!My){
     wrap.innerHTML = items.map(it => { const l = it.history[it.history.length - 1]; return `<div class="saved-row" data-slug="${escHtml(it.slug)}"><div><p class="saved-row-name">${escHtml(it.name)}</p><p class="saved-row-meta">${l ? 'Last checked ' + new Date(l.ts).toLocaleDateString('default',{month:'short',day:'numeric'}) + ' · avg score ' + (l.avgScore ?? '—') : 'No check-ins yet'}</p></div><span style="color:var(--ink-soft);">›</span></div>`; }).join('');
@@ -1074,10 +1083,11 @@ async function renderSavedDetail(slug){
   }
 
   window.__p2pSaved = { biz, history };
+  const ovScore = await savedOverall(slug, history);
 
   detailWrap.innerHTML = `
     <p class="back-link" id="backToList">‹ All businesses</p>
-    ${window.__p2pMy ? window.__p2pMy.hero(biz, history) : ''}
+    ${window.__p2pMy ? window.__p2pMy.hero(biz, history, ovScore) : ''}
     ${(history[history.length - 1] && history[history.length - 1].engine) ? `<p class="p2p-eng" style="margin:8px 4px 0;">✨ Latest assessment by <b>${escHtml(history[history.length - 1].engine)}</b></p>` : ''}
     <div class="card">
       ${window.__p2pMy ? '' : `<p class="detail-name">${escHtml(biz.name)}</p><p class="detail-meta">${escHtml(biz.address || '')} · ${history.length} check-in${history.length !== 1 ? 's' : ''}</p>`}

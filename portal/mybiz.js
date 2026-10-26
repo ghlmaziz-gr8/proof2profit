@@ -9,13 +9,13 @@
     var d = Math.floor((Date.now() - ts) / 864e5);
     return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 30 ? d + " days ago" : new Date(ts).toLocaleDateString("default", { month: "short", day: "numeric" });
   }
-  function stats(history) {
+  function stats(history, ov) {
     var sc = history.map(score).filter(function (v) { return v != null; });
     var cur = sc.length ? sc[sc.length - 1] : null, prev = sc.length > 1 ? sc[sc.length - 2] : null, first = sc.length ? sc[0] : null;
     var last = history[history.length - 1] || {};
     var asp = (last.aspects || []).filter(function (a) { return a && a.name && !isNaN(a.score); }).slice().sort(function (a, b) { return b.score - a.score; });
     return {
-      sc: sc, cur: cur, prev: prev, delta: prev == null ? null : cur - prev, sinceFirst: sc.length > 1 ? cur - first : null,
+      sc: sc, cur: ov != null ? ov : cur, rev: cur, prev: prev, delta: prev == null ? null : cur - prev, sinceFirst: sc.length > 1 ? cur - first : null,
       best: sc.length ? Math.max.apply(null, sc) : null, n: history.length, ts: last.ts,
       top: asp[0], low: asp.length > 1 ? asp[asp.length - 1] : null
     };
@@ -51,7 +51,7 @@
 
   function dash(items) {
     EXR = {};
-    var ss = items.map(function (it) { return { it: it, s: stats(it.history) }; });
+    var ss = items.map(function (it) { return { it: it, s: stats(it.history, it.ov) }; });
     var scored = ss.filter(function (x) { return x.s.cur != null; });
     var avg = scored.length ? Math.round(scored.reduce(function (a, x) { return a + x.s.cur; }, 0) / scored.length) : null;
     var upL = ss.filter(function (x) { return x.s.delta > 0; }), downL = ss.filter(function (x) { return x.s.delta < 0; });
@@ -64,7 +64,7 @@
       : attn && scored.length > 1 ? ("<b>" + esc(attn.it.name) + "</b> has the lowest score right now (" + attn.s.cur + "). Worth a re-check.")
       : "Re-check a business later to see how it moves.";
     var avgAttr = reg("d-avg", "Portfolio score: " + (avg == null ? "none yet" : avg + " out of 100"),
-      "<p><b>What it means:</b> one overall number for all the businesses you track. Higher is better.</p><p><b>How it is calculated:</b> the plain average of each business's <i>latest</i> average score: " +
+      "<p><b>What it means:</b> one overall number for all the businesses you track. Higher is better.</p><p><b>How it is calculated:</b> the plain average of each business's <i>latest</i> overall business health score (reviews, website and social combined, the same number shown on its report): " +
       (scored.length ? scored.map(function (x) { return esc(x.it.name) + " " + x.s.cur; }).join(", ") : "no scores yet") + (avg == null ? "" : " = <b>" + avg + "</b>") + ".</p><p><b>Bands:</b> 85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention." + (avg == null ? "" : " Yours: <b>" + bandTxt(avg) + "</b>.") + "</p>");
     var upAttr = reg("d-up", "Improving: " + up, "<p><b>What it means:</b> businesses whose latest average score is higher than at their previous check.</p><p><b>Right now:</b> " + names(upL) + ".</p><p class='ex-note'>A business with only one check-in cannot be compared yet, so it is not counted here.</p>");
     var downAttr = reg("d-down", "Slipping: " + down, "<p><b>What it means:</b> businesses whose latest average score is lower than at their previous check.</p><p><b>Right now:</b> " + names(downL) + ".</p><p>Open one to see which aspect dropped and what new concerns appeared.</p>");
@@ -81,9 +81,9 @@
 
   function trendList(s) { return s.sc.map(function (v, i) { return "#" + (i + 1) + ": " + v; }).join(" → "); }
   function card(it, i) {
-    var s = stats(it.history), c = col(s.cur), k = "c" + i + "-";
+    var s = stats(it.history, it.ov), c = col(s.cur), k = "c" + i + "-";
     var nm = esc(it.name);
-    var ringA = reg(k + "r", nm + ": " + (s.cur == null ? "no score" : s.cur + " out of 100"), "<p><b>What it means:</b> the latest average score for this business. Higher is better.</p><p><b>How it is calculated:</b> the average of its aspect scores (each 0–100) from the most recent check" + (s.top ? ": " + (it.history[it.history.length - 1].aspects || []).map(function (a) { return esc(a.name) + " " + Math.round(a.score); }).join(", ") : "") + ".</p><p><b>Band:</b> " + bandTxt(s.cur) + ". (85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention)</p>");
+    var ringA = reg(k + "r", nm + ": " + (s.cur == null ? "no score" : s.cur + " out of 100"), "<p><b>What it means:</b> the overall business health score for this business, the same number as on its report. Higher is better.</p><p><b>How it is calculated:</b> reviews 50%, website SEO 25% and social media 25% (areas not checked yet are left out). Its review score is the average of its aspect scores (each 0–100) from the most recent check" + (s.top ? ": " + (it.history[it.history.length - 1].aspects || []).map(function (a) { return esc(a.name) + " " + Math.round(a.score); }).join(", ") : "") + ".</p><p><b>Band:</b> " + bandTxt(s.cur) + ". (85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention)</p>");
     var chipA = s.delta == null
       ? reg(k + "d", "Not compared yet", "<p>This is the first saved check-in for " + nm + ", so there is nothing to compare against. Re-check it later and this chip will show whether the average score went up or down.</p>")
       : reg(k + "d", "Change since last check: " + (s.delta > 0 ? "+" : "") + s.delta, "<p><b>What it means:</b> how the average score moved between the last two check-ins.</p><p><b>How it is calculated:</b> latest <b>" + s.cur + "</b> minus previous <b>" + s.prev + "</b> = <b>" + (s.delta > 0 ? "+" : "") + s.delta + "</b>.</p>" + (s.delta === 0 ? "<p>No change at all.</p>" : "<p>" + (s.delta > 0 ? "Guests are describing this business more positively than last time." : "Guests are describing this business less positively than last time.") + "</p>"));
@@ -100,13 +100,13 @@
       '<div class="mb-card-spark mb-ex"' + spA + ">" + spark(s.sc, 120, 44, c) + '</div><span class="mb-go">›</span></div>';
   }
 
-  function hero(biz, history) {
-    var s = stats(history), c = col(s.cur);
+  function hero(biz, history, ov) {
+    var s = stats(history, ov), c = col(s.cur);
     var last = history[history.length - 1] || {};
     var asp = (last.aspects || []).map(function (a) { return esc(a.name) + " " + Math.round(a.score); }).join(", ");
     function kp(v, l, cls, key, title, html) { return '<div class="mb-hk mb-ex ' + (cls || "") + '"' + reg(key, title, html) + "><b>" + v + "</b><span>" + l + "</span><i class=\"mb-i\">i</i></div>"; }
     var d = s.delta == null ? "–" : (s.delta > 0 ? "+" : "") + s.delta;
-    var ringA = reg("h-r", esc(biz.name) + ": " + (s.cur == null ? "no score" : s.cur + " out of 100"), "<p><b>What it means:</b> the latest average score. Higher is better.</p><p><b>How it is calculated:</b> the average of its aspect scores (each 0–100) from the latest check" + (asp ? ": " + asp : "") + ".</p><p><b>Band:</b> " + bandTxt(s.cur) + ".</p>");
+    var ringA = reg("h-r", esc(biz.name) + ": " + (s.cur == null ? "no score" : s.cur + " out of 100"), "<p><b>What it means:</b> the overall business health score, the same number as on the report. Higher is better.</p><p><b>How it is calculated:</b> the average of its aspect scores (each 0–100) from the latest check" + (asp ? ": " + asp : "") + ".</p><p><b>Band:</b> " + bandTxt(s.cur) + ".</p>");
     var spA = reg("h-s", "Score trend", "<p>The average score at each saved check-in, oldest to newest.</p><p><b>History:</b> " + (s.sc.length ? trendList(s) : "one check-in so far") + ".</p>");
     return '<div class="mb-hero"><div class="mb-orb o1"></div><div class="mb-orb o2"></div>' +
       '<div class="mb-hero-top"><div class="mb-dash-ring mb-ex"' + ringA + '>' + ring(s.cur, 104, 9, true) + '<i class="mb-i">i</i></div>' +
@@ -114,9 +114,9 @@
       '<p class="mb-dash-sub">' + esc(biz.address || "") + (biz.address ? " · " : "") + "last checked " + (s.ts ? ago(s.ts) : "never") + "</p></div></div>" +
       '<div class="mb-hero-spark mb-ex"' + spA + ">" + spark(s.sc, 320, 56, "#FFD35A") + "</div>" +
       '<div class="mb-hks">' +
-      kp(d, "vs last check", s.delta > 0 ? "up" : s.delta < 0 ? "down" : "", "h-d", "Change since last check", s.delta == null ? "<p>Only one check-in so far, so there is nothing to compare. Re-check later to see the change.</p>" : "<p><b>How it is calculated:</b> latest <b>" + s.cur + "</b> minus previous <b>" + s.prev + "</b> = <b>" + d + "</b> points.</p>") +
-      kp(s.best == null ? "–" : s.best, "Best score", "", "h-b", "Best score", "<p>The highest average score across all your check-ins" + (s.sc.length ? ": " + trendList(s) : "") + ". If the latest equals the best, you are at your peak.</p>") +
-      kp(s.sinceFirst == null ? "–" : (s.sinceFirst > 0 ? "+" : "") + s.sinceFirst, "Since first", s.sinceFirst > 0 ? "up" : s.sinceFirst < 0 ? "down" : "", "h-f", "Change since the first check", s.sinceFirst == null ? "<p>Needs at least two check-ins.</p>" : "<p><b>How it is calculated:</b> latest <b>" + s.cur + "</b> minus your very first check <b>" + s.sc[0] + "</b> = <b>" + (s.sinceFirst > 0 ? "+" : "") + s.sinceFirst + "</b> points. This is your overall progress since you started tracking.</p>") +
+      kp(d, "vs last check", s.delta > 0 ? "up" : s.delta < 0 ? "down" : "", "h-d", "Change since last check", s.delta == null ? "<p>Only one check-in so far, so there is nothing to compare. Re-check later to see the change.</p>" : "<p><b>How it is calculated:</b> latest review score <b>" + s.rev + "</b> minus previous <b>" + s.prev + "</b> = <b>" + d + "</b> points.</p>") +
+      kp(s.best == null ? "–" : s.best, "Best review score", "", "h-b", "Best review score", "<p>The highest review score (average of the aspect scores) across all your check-ins" + (s.sc.length ? ": " + trendList(s) : "") + ". If the latest equals the best, you are at your peak.</p>") +
+      kp(s.sinceFirst == null ? "–" : (s.sinceFirst > 0 ? "+" : "") + s.sinceFirst, "Since first", s.sinceFirst > 0 ? "up" : s.sinceFirst < 0 ? "down" : "", "h-f", "Change since the first check", s.sinceFirst == null ? "<p>Needs at least two check-ins.</p>" : "<p><b>How it is calculated:</b> latest review score <b>" + s.rev + "</b> minus your very first check <b>" + s.sc[0] + "</b> = <b>" + (s.sinceFirst > 0 ? "+" : "") + s.sinceFirst + "</b> points. This is your overall progress since you started tracking.</p>") +
       kp(s.n, "Check-ins", "", "h-n", "Check-ins: " + s.n, "<p>How many times you saved an assessment of this business. Each one is listed under Past assessments below.</p>") + "</div>" +
       (s.top || s.low ? '<div class="mb-chips hero">' +
         (s.top ? '<span class="mb-ex mb-chip good"' + reg("h-t", "Strongest: " + s.top.name, "<p>The highest-scoring aspect in the latest check: <b>" + Math.round(s.top.score) + "</b> out of 100 (" + bandTxt(s.top.score) + "). What this business does best according to guests.</p>") + ">★ Strongest: " + esc(s.top.name) + " " + Math.round(s.top.score) + "</span>" : "") +
