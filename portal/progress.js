@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   var TH = 5;               // aspect change (points) that counts as real movement
-  var COL = { up: "#1F9D74", down: "#D9534F", flat: "#7A756C", mixed: "#C97A00" };
+  var COL = { up: "#1F9D74", down: "#D9534F", flat: "#2F8FB5", mixed: "#C97A00" };
 
   function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function avgOf(asp) { asp = asp || []; return asp.length ? Math.round(asp.reduce(function (s, a) { return s + (Number(a.score) || 0); }, 0) / asp.length) : null; }
@@ -157,7 +157,7 @@
         var last = hist[hist.length - 1];
         var cur = { ts: Date.now(), rating: data.rating == null ? null : data.rating, avgScore: avgOf(data.aspects), aspects: data.aspects || [], likes: data.likes || [], dislikes: data.dislikes || [] };
         var c = compare(last, cur);
-        return '<div class="p2p-banner">' + card(c, { title: c.head + " since your last assessment", sub: "Compared with " + dstr(last.ts) + ". Save to My Businesses to record this one." }) + "</div>";
+        return '<div class="p2p-banner">' + card(c, { title: c.head + " since your last assessment", sub: (new Date(last.ts).toDateString() === new Date().toDateString() ? "Compared with your assessment from earlier today, so little change is expected. " : "Compared with " + dstr(last.ts) + ". ") + "This one is saved automatically." }) + "</div>";
       });
     } catch (e) { return Promise.resolve(""); }
   }

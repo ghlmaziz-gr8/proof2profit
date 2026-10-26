@@ -41,7 +41,7 @@
   }
 
   function progressBlock(c, subtitle) {
-    var colr = { up: "#1F9D74", down: "#D9534F", mixed: "#C97A00", flat: "#7A756C" }[c.verdict];
+    var colr = { up: "#1F9D74", down: "#D9534F", mixed: "#C97A00", flat: "#2F8FB5" }[c.verdict];
     var rows = c.rows.map(function (r) {
       var d = r.dir === "new" ? "new" : r.dir === "gone" ? "dropped" : r.delta > 0 ? "+" + r.delta : r.delta < 0 ? String(r.delta).replace("-", "−") : "0";
       return "<tr><td>" + esc(r.name) + "</td><td>" + (r.prev == null ? "—" : r.prev) + "</td><td>" + (r.cur == null ? "—" : r.cur) + '</td><td style="font-weight:700;color:' + ({ up: "#1F9D74", down: "#D9534F" }[r.dir] || "#7a756c") + '">' + d + "</td></tr>";
