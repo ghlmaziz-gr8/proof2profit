@@ -1237,7 +1237,7 @@ function renderReport(data){
       ${campaignHtml}
       <div class="save-btn-row">
         <button class="save-biz-btn" id="saveBizBtn">+ Save to My Businesses</button>
-        <button class="p2x-share-btn" type="button" data-share="single">✉ Share by email</button>
+        <button class="p2x-share-btn" type="button" data-share="single"><span class="p2x-ico"><svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-.17em"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg></span> Share by email</button>
         <button class="p2x-share-btn" type="button" data-export="single" aria-haspopup="menu">⬇ Export</button>
       </div>
     </div>
@@ -1565,7 +1565,7 @@ function renderComparison(a, b){
       </div>
 
       <div class="verdict">${verdict}${learnHtml}</div>
-      <div class="save-btn-row" style="margin-top:14px;"><button class="p2x-share-btn" type="button" data-share="compare">✉ Share this comparison by email</button><button class="p2x-share-btn" type="button" data-export="compare" aria-haspopup="menu">⬇ Export</button></div>
+      <div class="save-btn-row" style="margin-top:14px;"><button class="p2x-share-btn" type="button" data-share="compare"><span class="p2x-ico"><svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-.17em"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg></span> Share this comparison by email</button><button class="p2x-share-btn" type="button" data-export="compare" aria-haspopup="menu">⬇ Export</button></div>
     </div>
   `;
   window.__p2pLast = { kind: 'compare', a: a, b: b };

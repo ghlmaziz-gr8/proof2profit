@@ -641,7 +641,7 @@ async function drain(env) {
       const s = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: env.MAIL_FROM || "Proof to Profit <noreply@proof2profit.site>", to: [m.to_email], subject: m.subject, html: m.html }),
+        body: JSON.stringify({ from: env.MAIL_FROM || "Proof to Profit <noreply@proof2profit.site>", to: [m.to_email], ...(m.cc_email && m.cc_email.toLowerCase() !== String(m.to_email).toLowerCase() ? { cc: [m.cc_email] } : {}), subject: m.subject, html: m.html }),
       });
       results.push({ id: m.id, ok: s.ok, error: s.ok ? null : (await s.text()).slice(0, 300) });
     } catch (e) {

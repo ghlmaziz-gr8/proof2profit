@@ -106,7 +106,7 @@
     if (!dlg) { dlg = el("dialog", { class: "p2x-modal p2s-modal" }); document.body.appendChild(dlg); dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); }); }
     dlg.innerHTML = "";
     var top = el("div", { class: "p2s-top" });
-    top.appendChild(el("div", { class: "ic" }, "✉"));
+    var ic = el("div", { class: "ic" }); ic.innerHTML = '<svg viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-.17em"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>'; top.appendChild(ic);
     var tt = el("div"); tt.appendChild(el("b", null, isCmp ? "Share this comparison" : "Share this analysis")); tt.appendChild(el("small", null, title));
     top.appendChild(tt); dlg.appendChild(top);
 
@@ -143,7 +143,9 @@
     ta.addEventListener("input", function () { cnt.textContent = ta.value.length + " / 300"; });
     l2.appendChild(ta); l2.appendChild(cnt); body.appendChild(l2);
 
-    var l3 = el("label", { class: "p2x-toggle" }); var cp = el("input", { type: "checkbox" }); l3.appendChild(cp); l3.appendChild(document.createTextNode(" Send me a copy too")); body.appendChild(l3);
+    var myEmail = ""; try { var ss = window.__p2p && window.__p2p.session && window.__p2p.session(); myEmail = (ss && ss.user && ss.user.email) || ""; } catch (e) {}
+    if (myEmail) { var ccl = el("p", { class: "p2x-note", style: "margin:2px 0 8px" }); ccl.appendChild(document.createTextNode("CC: ")); ccl.appendChild(el("b", null, myEmail)); ccl.appendChild(document.createTextNode(" (you, on every email sent)")); body.appendChild(ccl); }
+    var l3 = el("label", { class: "p2x-toggle" }); var cp = el("input", { type: "checkbox" }); l3.appendChild(cp); l3.appendChild(document.createTextNode(" Also send me a separate copy")); body.appendChild(l3);
     body.appendChild(el("p", { class: "p2x-note" }, "They get a clean, read-only summary by email: scores, what guests love, where it slips" + (isCmp ? ", and the verdict." : ", and next steps.") + " They don't need an account. Up to 5 people at a time."));
     body.appendChild(msg);
 
@@ -172,7 +174,7 @@
         var ok = el("div", { class: "p2s-ok" });
         ok.innerHTML = '<svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="30"/><path d="M26 41l10 10 19-21"/></svg>';
         ok.appendChild(el("b", { style: "font:700 20px 'Space Grotesk',system-ui,sans-serif" }, "On its way"));
-        ok.appendChild(el("p", { class: "p2x-note" }, "Sending to " + n + (n === 1 ? " person" : " people") + (cp.checked ? " plus a copy to you" : "") + ". It usually arrives within a few minutes."));
+        ok.appendChild(el("p", { class: "p2x-note" }, "Sending to " + n + (n === 1 ? " person" : " people") + (myEmail ? ", with you on CC" : "") + (cp.checked ? " and a separate copy to you" : "") + ". It usually arrives within a few minutes."));
         var done = el("button", { class: "p2x-btn", type: "button" }, "Done"); done.addEventListener("click", function () { dlg.close(); });
         ok.appendChild(done); dlg.appendChild(ok);
       });
