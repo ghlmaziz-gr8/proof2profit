@@ -101,7 +101,7 @@ async function readCapped(res, maxBytes) {
   }
   const buf = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0)); let o = 0;
   for (const c of chunks) { buf.set(c, o); o += c.length; }
-  return { text: new TextDecoder("utf-8", { fatal: false }).decode(buf), bytes: got, truncated };
+  return { text: new TextDecoder("utf-8").decode(buf), bytes: got, truncated };
 }
 async function fetchPage(startUrl, { maxBytes = 1500000, timeout = 9000, allowLocal = false } = {}) {
   let url = startUrl, hops = [], t0 = Date.now();
