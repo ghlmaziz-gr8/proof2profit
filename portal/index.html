@@ -1250,7 +1250,7 @@ function renderReport(data){
   if(window.__p2pProgress){
     (data._viewing ? Promise.resolve('') : window.__p2pProgress.reportBanner(data, slugify, storageGetJSON)).then(h => {
       if(!h || !window.__p2pLast || window.__p2pLast.a !== data) return;
-      const anchor = reportEl.querySelector('.section-label');
+      const anchor = reportEl.querySelector('.enh-grid') || reportEl.querySelector('.section-label');
       if(!anchor) return;
       anchor.insertAdjacentHTML('beforebegin', h);
       window.__p2pProgress.animate(reportEl);

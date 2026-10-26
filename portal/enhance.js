@@ -126,6 +126,7 @@
     ".enh-cgrid{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}",
     ".enh-grid .list-block:first-child{border-top:0;margin-top:0;padding-top:0}",
     ".enh-colA .section-label{margin-top:0}",
+    ".enh-colB .list-block{margin:0 0 26px;padding:0 0 22px}.enh-colB .list-block:last-child{margin-bottom:0}.enh-colB .list-block li{margin:0 0 9px;line-height:1.5}.enh-grid{margin-top:6px}",
     /* empty/welcome */
     ".empty{padding:0!important;border:0!important;background:transparent!important;text-align:left!important}",
     ".enh-welcome{position:relative;overflow:hidden;border-radius:22px;background:#14161A;color:#F3EFE8;padding:28px;display:grid;gap:22px;grid-template-columns:minmax(0,1fr)}",
