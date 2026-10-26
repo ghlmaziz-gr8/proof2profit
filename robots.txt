@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://proof2profit.site/sitemap.xml

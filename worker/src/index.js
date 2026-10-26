@@ -294,7 +294,50 @@ async function socialAudit(input) {
   return out;
 }
 
-export { seoAudit, socialAudit, socialTarget, readSocial };
+// ---------- AI social assessment: public read + Google Search grounding, then a structured report ----------
+function parseJsonLoose(t) {
+  t = String(t || "").replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try { return JSON.parse(t); } catch (e) { const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e2) {} } return null; }
+}
+async function socialAssess(env, input) {
+  const t = socialTarget(input);
+  let direct = null;
+  try { direct = await socialAudit(input); } catch (e) { direct = null; }
+  const who = `${t.platform} profile @${t.handle} (${t.url})`;
+  const g1 = await gemini(env, {
+    contents: [{ role: "user", parts: [{ text: `Find what is publicly known about the ${who}. Report only what current web sources show: approximate follower count, how often it posts, typical likes/comments/views per post, content themes, recent activity, collaborations or press, and any signs the account is inactive. Give figures only when a source states them. If you find almost nothing, say so plainly.` }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
+  });
+  if (g1.status === 429) throw { code: "rate_limited" };
+  const research = g1.status === 200 ? textOf(g1.data).trim() : "";
+  const chunks = g1.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  const sources = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 4);
+  const facts = direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.";
+  const prompt = `Respond with ONLY a single JSON object, no markdown. Never put a literal double-quote inside a string value.
+
+You are a social media analyst for a small local business. Assess this ${who} for engagement and health.
+
+Evidence:
+${facts}
+Web research: ${research || "nothing found"}
+
+Rules: use ONLY the evidence above. Never invent follower counts, engagement figures or posts. If evidence is thin, say so, lower confidence and give a cautious score. Engagement benchmarks are rough industry rules of thumb.
+
+{"score":0-100 integer,"confidence":"high|medium|low","followers":number or null,"engagement":"one sentence on how engaged the audience looks and why","posting":"one sentence on posting consistency","score_reason":"2 sentences explaining how the score was reached and what it is based on","headline":"one sentence verdict","strengths":["2-3 items"],"gaps":["2-3 items"],"content_ideas":["3 specific post ideas for this kind of business"],"posting_plan":"one sentence weekly rhythm","evidence_note":"one sentence on what was and was not available"}`;
+  const g2 = await gemini(env, { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, maxOutputTokens: 2500, responseMimeType: "application/json" } });
+  if (g2.status === 429) throw { code: "rate_limited" };
+  if (g2.status !== 200) throw { code: "ai_error", message: g2.data?.error?.message || "AI request failed" };
+  const r = parseJsonLoose(textOf(g2.data));
+  if (!r || typeof r.headline !== "string") throw { code: "ai_error", message: "unreadable AI answer" };
+  r.score = Math.max(0, Math.min(100, Math.round(Number(r.score) || 0)));
+  if (!["high", "medium", "low"].includes(r.confidence)) r.confidence = "low";
+  if (direct && direct.found && Number.isFinite(direct.followers)) r.followers = direct.followers;
+  else if (!Number.isFinite(Number(r.followers))) r.followers = null;
+  return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, ts: Date.now() };
+}
+
+export { seoAudit, socialAudit, socialTarget, readSocial, socialAssess };
 
 export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(drain(env)); },
@@ -368,6 +411,19 @@ export default {
       } catch (e) {
         const code = e && e.code ? e.code : "audit_failed";
         return json({ error: code, message: (e && e.message) || "" }, code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
+      }
+    }
+
+    if (path === "/social-assess") {
+      const u = await bump(env, token, "social", parseInt(env.DAILY_SOCIAL_LIMIT || "30", 10));
+      if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
+      if (u.error) return json({ error: "usage_check_failed" }, 502, h);
+      if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
+      try {
+        return json({ result: await socialAssess(env, body.url) }, 200, h);
+      } catch (e) {
+        const code = e && e.code ? e.code : "audit_failed";
+        return json({ error: code, message: (e && e.message) || "" }, code === "rate_limited" ? 429 : code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
       }
     }
 
