@@ -1253,6 +1253,14 @@ function renderReport(data){
     </div>
   `;
   window.__p2pLast = { kind: 'single', a: data };
+  if(!data._viewing && !data.__notified && data.name){
+    data.__notified = true;
+    try{
+      const asp0 = data.aspects || [], av0 = asp0.length ? Math.round(asp0.reduce((s, x) => s + Number(x.score || 0), 0) / asp0.length) : null;
+      const sb0 = window.__p2p && window.__p2p.sb;
+      if(sb0) sb0.rpc('notify_assessment', { p_title: 'Assessment ready: ' + data.name, p_body: 'Your new assessment for ' + data.name + (data.address ? ' (' + data.address + ')' : '') + ' is done' + (av0 != null ? ', with an average aspect score of ' + av0 + ' out of 100' : '') + '. It is saved in My Businesses.' }).then(() => window.dispatchEvent(new CustomEvent('p2p:notify')), () => {});
+    }catch(e){}
+  }
   setState('report');
   if(window.__p2pProgress){
     (data._viewing ? Promise.resolve('') : window.__p2pProgress.reportBanner(data, slugify, storageGetJSON)).then(h => {
@@ -1569,6 +1577,10 @@ function renderComparison(a, b){
     </div>
   `;
   window.__p2pLast = { kind: 'compare', a: a, b: b };
+  if(!a.__notified && a.name && b && b.name){
+    a.__notified = true;
+    try{ const sb1 = window.__p2p && window.__p2p.sb; if(sb1) sb1.rpc('notify_assessment', { p_title: 'Comparison ready: ' + a.name + ' vs ' + b.name, p_body: 'Your side-by-side comparison of ' + a.name + ' and ' + b.name + ' is ready.' }).then(() => window.dispatchEvent(new CustomEvent('p2p:notify')), () => {}); }catch(e){}
+  }
   setState('report');
 }
 
