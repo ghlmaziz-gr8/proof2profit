@@ -1,5 +1,13 @@
 // Connects the portal to Supabase (Google sign-in + storage) and the Worker (AI + search).
 // Provides the small `claude.use(...)` surface the app code was written against.
+// Keeps at most `max` entries, and only the latest entry for each calendar month.
+window.__p2pPruneMonthly = function (arr, max) {
+  var by = {}, out = [];
+  (arr || []).slice().sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); }).forEach(function (x) { var d = new Date(x.ts || 0); by[d.getFullYear() + "-" + d.getMonth()] = x; });
+  Object.keys(by).forEach(function (k) { out.push(by[k]); });
+  out.sort(function (a, b) { return a.ts - b.ts; });
+  return out.slice(-(max || 24));
+};
 (function () {
   var cfg = window.P2P_CONFIG || {};
   var gate = document.getElementById("authGate");

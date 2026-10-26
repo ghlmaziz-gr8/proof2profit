@@ -82,11 +82,16 @@
       '<p class="seo-last"></p><div class="seo-out" aria-live="polite"></div></section>';
     var root = el.querySelector(".seo"), inp = root.querySelector(".seo-in"), out = root.querySelector(".seo-out"), lastEl = root.querySelector(".seo-last"), go = root.querySelector(".seo-go");
     if (opts.website) inp.value = opts.website.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-    function showLast() { lastEl.innerHTML = saved && saved.ts ? "Last checked " + fmtD(saved.ts) + " · " + esc(saved.url.replace(/^https?:\/\//, "")) + " · score <b>" + saved.score + "</b>" : ""; }
-    if (opts.load) Promise.resolve(opts.load(kvKey, null)).then(function (s) { if (s && s.url) { saved = s; if (!inp.value) inp.value = s.url.replace(/^https?:\/\//i, "").replace(/\/$/, ""); showLast(); } }).catch(function () { });
+    function showLast() { lastEl.innerHTML = saved && saved.ts ? "Last checked " + fmtD(saved.ts) + " · " + esc(saved.url.replace(/^https?:\/\//, "")) + " · score <b>" + saved.score + "</b>" + histLine() : ""; }
+    function histLine() { var h = (saved && saved.hist) || []; if (h.length < 2) return ""; return '<br><span class="seo-hist">History: ' + h.slice(-8).reverse().map(function (x) { return new Date(x.ts).toLocaleDateString("default", { month: "short", year: "2-digit" }) + " <b>" + x.score + "</b>"; }).join(" · ") + "</span>"; }
+    if (opts.load) Promise.resolve(opts.load(kvKey, null)).then(function (s) { if (s && s.url) {
+      saved = s; if (!s.hist) s.hist = [{ ts: s.ts, score: s.score }];
+      if (!inp.value || opts.website) inp.value = s.url.replace(/^https?:\/\//i, "").replace(/\/$/, ""); showLast();
+      if (s.F && !last) { try { var S0 = score(s.F, ctx), h0 = s.hist; last = { F: s.F, S: S0 }; render(s.F, S0, h0.length > 1 ? h0[h0.length - 2] : null, s.ai); } catch (e) { } }
+    } }).catch(function () { });
 
-    function render(F, S) {
-      var prev = saved && saved.score != null && saved.url && opts.__prevOk !== false ? saved : null;
+    function render(F, S, prevOv, storedAi) {
+      var prev = prevOv !== undefined ? prevOv : (saved && saved.score != null && saved.url && opts.__prevOk !== false ? saved : null);
       var delta = prev ? S.overall - prev.score : null;
       var fixes = S.list.filter(function (c) { return c.s === "fail" || c.s === "warn"; }).sort(function (a, b) { return (b.w * (b.s === "fail" ? 1 : 0.5)) - (a.w * (a.s === "fail" ? 1 : 0.5)); }).slice(0, 5);
       var R = 52, circ = 2 * Math.PI * R, off = circ * (1 - S.overall / 100);
@@ -118,21 +123,22 @@
       out.querySelector("[data-k=overall]").addEventListener("click", function () {
         ex("SEO score: " + S.overall + " out of 100", "<p><b>What it means:</b> how well this homepage covers the on-page and technical basics search engines look for, with extra weight on local search for a business like yours.</p><p><b>How it is calculated:</b> " + S.list.filter(function (c) { return c.s !== "skip"; }).length + " checks across 5 areas. Pass = full points, could be better = half, fail = none, weighted by importance. Total <b>" + (Math.round(S.TG * 10) / 10) + "</b> of <b>" + S.TW + "</b> = <b>" + S.overall + "</b>.</p><p><b>Bands:</b> 85+ Excellent · 70–84 Good · 50–69 Needs work · under 50 Poor.</p><p class='ex-note'>This is a health check of the homepage. It does not measure Google rankings, backlinks, or reviews, which also affect how you rank.</p>");
       });
-      aiBlock(F, S, fixes);
+      aiBlock(F, S, fixes, storedAi);
     }
 
-    function aiBlock(F, S, fixes) {
+    function aiBlock(F, S, fixes, storedAi) {
       var box = out.querySelector("#seoAi"); if (!box) return;
       function list(a) { return (a || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join(""); }
       function show(d) {
-        box.innerHTML = '<p class="seo-gt">AI action plan</p><p class="seo-head">' + esc(d.headline || "") + '</p><div class="seo-cols"><div><b>Quick wins (this week)</b><ol>' + list(d.quick_wins) + "</ol></div><div><b>This month</b><ol>" + list(d.this_month) + "</ol></div></div>" + ((d.local_tips || []).length ? "<div class=\"seo-tips\"><b>Local search tips</b><ul>" + list(d.local_tips) + "</ul></div>" : "") + '<p class="seo-fine">AI-written from the check results above.</p>';
+        box.innerHTML = '<p class="seo-gt">AI action plan</p><p class="seo-head">' + esc(d.headline || "") + '</p><div class="seo-cols"><div><b>Quick wins (this week)</b><ol>' + list(d.quick_wins) + "</ol></div><div><b>This month</b><ol>" + list(d.this_month) + "</ol></div></div>" + ((d.local_tips || []).length ? "<div class=\"seo-tips\"><b>Local search tips</b><ul>" + list(d.local_tips) + "</ul></div>" : "") + '<p class="seo-fine">AI-written from the check results above' + (d.__ts ? " · written " + fmtD(d.__ts) : "") + '.</p>';
       }
+      if (storedAi && storedAi.headline) { show(storedAi); return; }
       box.innerHTML = '<button type="button" class="seo-go ghost">✨ Create an AI action plan</button><p class="seo-fine">Turns the findings into a prioritised to-do list. Uses one AI request.</p>';
       box.querySelector("button").addEventListener("click", function () {
         box.innerHTML = '<div class="seo-load"><span></span><span></span><span></span> Writing your plan…</div>';
         var probs = S.list.filter(function (c) { return c.s === "fail" || c.s === "warn"; }).map(function (c) { return "- " + c.label + " [" + c.s + "]: found " + (c.found || "n/a") + "; fix: " + c.fix; }).join("\n");
         var prompt = "Respond with ONLY a single JSON object, no markdown fences, no preamble. Never place a literal double-quote character inside a string value.\n\nYou are an SEO advisor for a small local business: " + (opts.name || "the business") + (opts.address ? " (" + opts.address + ")" : "") + ", website " + F.finalUrl + ". Overall SEO health score is " + S.overall + "/100.\n\nHomepage facts: title=" + (F.title || "none") + "; meta description length=" + F.metaDescLen + "; H1=" + (F.h1[0] || "none") + "; words=" + F.words + "; schema types=" + (F.schema.types.join(", ") || "none") + "; sitemap=" + (F.sitemap && F.sitemap.exists ? "yes" : "no") + ".\n\nProblems found:\n" + (probs || "none") + "\n\nWrite a practical plan an owner with no technical background can follow. Use only the findings above; do not invent data. Keep each item to one short sentence.\n\n" + '{"headline":"one sentence summary","quick_wins":["3 items doable this week"],"this_month":["3 items"],"local_tips":["2 tips specific to local search for this kind of business, such as Google Business Profile and reviews"]}';
-        Promise.resolve(opts.ai(prompt)).then(function (r) { var d = (r && typeof r === "object") ? r : (opts.parse ? opts.parse(String(r)) : null); if (!d || !d.headline) throw new Error("bad"); show(d); })
+        Promise.resolve(opts.ai(prompt)).then(function (r) { var d = (r && typeof r === "object") ? r : (opts.parse ? opts.parse(String(r)) : null); if (!d || !d.headline) throw new Error("bad"); d.__ts = Date.now(); show(d); if (saved && opts.save) { saved.ai = d; opts.save(kvKey, saved); } })
           .catch(function (e) { box.innerHTML = '<p class="seo-err">' + (opts.isLimit && opts.isLimit(e) ? "You have reached today's AI limit. It resets daily." : "Could not write the plan just now.") + "</p>"; });
       });
     }
@@ -148,7 +154,8 @@
         if (F.error) throw { code: F.error };
         var S = score(F, ctx); last = { F: F, S: S };
         render(F, S);
-        var rec = { url: F.finalUrl, ts: Date.now(), score: S.overall, cats: S.cats.reduce(function (o, c) { o[c.name] = c.score; return o; }, {}) };
+        var oldHist = (saved && saved.hist) || (saved && saved.ts ? [{ ts: saved.ts, score: saved.score }] : []), nowTs = Date.now(), slim = {}; Object.keys(F).forEach(function (k) { if (k !== "text") slim[k] = F[k]; });
+        var rec = { url: F.finalUrl, ts: nowTs, score: S.overall, F: slim, hist: window.__p2pPruneMonthly ? window.__p2pPruneMonthly(oldHist.concat([{ ts: nowTs, score: S.overall }]), 24) : oldHist.concat([{ ts: nowTs, score: S.overall }]).slice(-24), cats: S.cats.reduce(function (o, c) { o[c.name] = c.score; return o; }, {}) };
         if (opts.save) opts.save(kvKey, rec);
         saved = rec; showLast();
       }).catch(function (e) { out.innerHTML = '<p class="seo-err">' + esc(errMsg(e)) + "</p>"; })
@@ -159,7 +166,7 @@
   var css = ".seo{margin:18px 0;border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}.seo-eyebrow{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--coral-dark);font-weight:700}.seo h3{margin:2px 0 4px;font:700 19px 'Space Grotesk',sans-serif}.seo-meta{margin:0;font-size:12.5px;color:var(--ink-soft)}" +
     ".seo-form{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.seo-in{flex:1 1 220px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;font-size:15px;background:#fff;color:var(--ink)}.seo-in:focus{outline:2px solid var(--coral);outline-offset:1px}" +
     ".seo-go{background:var(--coral);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;min-height:0;width:auto}.seo-go.ghost{background:#fff;color:var(--coral-dark);border:1px solid var(--coral)}.seo-go.ghost:hover{background:rgba(246,149,0,.1);color:var(--coral-dark)}.seo-go:disabled{opacity:.6;cursor:wait}" +
-    ".seo-last{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft)}.seo-last:empty{display:none}.seo-out{margin-top:6px}.seo-err{color:var(--warn);font-size:13.5px;margin:12px 0 0}" +
+    ".seo-hist{color:var(--ink-soft)}.seo-last{margin:8px 0 0;font-size:12.5px;color:var(--ink-soft)}.seo-last:empty{display:none}.seo-out{margin-top:6px}.seo-err{color:var(--warn);font-size:13.5px;margin:12px 0 0}" +
     ".seo-res{opacity:0;transform:translateY(8px);transition:opacity .5s,transform .5s}.seo-res.in{opacity:1;transform:none}" +
     ".seo-hero{display:flex;gap:18px;align-items:center;margin:14px 0;flex-wrap:wrap;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border-radius:16px;padding:16px}.seo-ring{position:relative;background:none;border:0;padding:0;min-height:0;width:132px;height:132px;color:#fff;cursor:pointer;flex:0 0 auto}.seo-ring:hover{background:none}.seo-ring .arc{transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1)}.seo-ring .num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1}.seo-ring b{font:700 38px 'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}.seo-ring small{font-size:12px;color:rgba(255,255,255,.65)}" +
     ".seo-hc{min-width:0;flex:1 1 200px}.seo-grade{margin:0;font:700 24px 'Space Grotesk',sans-serif}.seo-site{margin:2px 0 6px;font-size:13px;color:rgba(255,255,255,.75);overflow-wrap:anywhere}.seo-delta{margin:0 0 6px;font-size:13px;color:rgba(255,255,255,.8)}.seo-delta.up{color:#5fe0b0}.seo-delta.dn{color:#ff8f7a}.seo-count{margin:0;font-size:12.5px;color:rgba(255,255,255,.8)}.seo-count .g{color:#5fe0b0}.seo-count .w{color:#FFD35A}.seo-count .r{color:#ff8f7a}" +

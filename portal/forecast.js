@@ -130,14 +130,14 @@
 
     // ---- AI outlook (on demand, cached) ----
     var aiBox = el.querySelector("#fcAi");
-    function renderAi(d, cachedTs) {
+    function renderAi(d, cachedTs, basedN) {
       function list(a) { return (a || []).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join(""); }
       function hz(t, o) { o = o || {}; return '<div class="fc-hz"><h4>' + t + "</h4><p>" + esc(o.outlook || "") + '</p><div class="fc-cols"><div><b class="g">Likely drivers</b><ul>' + list(o.drivers) + '</ul></div><div><b class="r">Watch out for</b><ul>' + list(o.risks) + "</ul></div></div></div>"; }
       aiBox.innerHTML = '<div class="fc-aihead"><p class="fc-sub">AI outlook</p><button type="button" class="fc-refresh">Refresh</button></div><p class="fc-headline">' + esc(d.headline || "") + "</p>" +
         hz("Next month", d.next_month) + hz("Next 6 months", d.next_6_months) +
         ((d.actions || []).length ? '<div class="fc-act"><b>Do this now to improve the forecast</b><ol>' + list(d.actions) + "</ol></div>" : "") +
         (d.seasonal_note ? '<p class="fc-season">🗓 ' + esc(d.seasonal_note) + "</p>" : "") +
-        '<p class="fc-fine">AI-written explanation of the numbers above' + (cachedTs ? " · generated " + fmtD(cachedTs) : "") + ". It is a forecast, not a guarantee.</p>";
+        '<p class="fc-fine">AI-written explanation of the numbers above' + (cachedTs ? " · generated " + fmtD(cachedTs) : "") + ". It is a forecast, not a guarantee." + (basedN != null && basedN !== F.n ? " Written when there " + (basedN === 1 ? "was 1 check-in" : "were " + basedN + " check-ins") + "; there " + (F.n === 1 ? "is now 1" : "are now " + F.n) + ". Tap Refresh to update it." : "") + "</p>";
       aiBox.querySelector(".fc-refresh").addEventListener("click", function () { run(true); });
     }
     function btn() {
@@ -172,7 +172,7 @@
     }
     btn();
     if (opts.load) Promise.resolve(opts.load(kvKey, null)).then(function (c) {
-      if (c && c.d && c.n === F.n && Date.now() - c.ts < 14 * DAY) renderAi(c.d, c.ts);
+      if (c && c.d) renderAi(c.d, c.ts, c.n);
     }).catch(function () { });
   }
 

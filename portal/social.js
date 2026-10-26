@@ -58,7 +58,7 @@
         var R = r.result; pr.busy = false;
         if (!R || !R.report) throw { code: "no_data" };
         pr.report = R.report; pr.direct = R.direct; pr.sources = R.sources || []; pr.ts = Date.now();
-        pr.snaps = (pr.snaps || []).concat([{ ts: pr.ts, score: R.report.score, followers: R.report.followers }]).slice(-24);
+        var sn2 = (pr.snaps || []).concat([{ ts: pr.ts, score: R.report.score, followers: R.report.followers }]); pr.snaps = window.__p2pPruneMonthly ? window.__p2pPruneMonthly(sn2, 24) : sn2.slice(-24);
         persist(); draw();
       }).catch(function (e) {
         pr.busy = false;
@@ -102,7 +102,7 @@
         '<div class="soc-ideas"><b>Post ideas</b><ol>' + list(R.content_ideas) + '</ol></div>' +
         (R.posting_plan ? '<p class="soc-line">🎯 ' + esc(R.posting_plan) + '</p>' : '') +
         '<p class="soc-fine">' + esc(R.evidence_note || "") + ' AI-written from public information, so treat figures as estimates.' + (pr.sources && pr.sources.length ? ' Sources: ' + esc(pr.sources.join(", ")) + '.' : '') + '</p>' +
-        '<div class="soc-fa"><button type="button" class="soc-go ghost sm" data-re="' + id + '"' + (pr.busy ? " disabled" : "") + '>' + (pr.busy ? "Re-assessing…" : "Re-assess") + '</button></div>';
+        (pr.snaps && pr.snaps.length > 1 ? '<p class="soc-fine">History: ' + pr.snaps.slice(-8).reverse().map(function (x) { return new Date(x.ts).toLocaleDateString("default", { month: "short", year: "2-digit" }) + " <b>" + x.score + "</b>"; }).join(" · ") + '</p>' : '') + '<div class="soc-fa"><button type="button" class="soc-go ghost sm" data-re="' + id + '"' + (pr.busy ? " disabled" : "") + '>' + (pr.busy ? "Re-assessing…" : "Re-assess") + '</button></div>';
       return '<div class="soc-card">' + h + '</div>';
     }
     function draw() {

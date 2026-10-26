@@ -988,8 +988,8 @@ async function saveBusinessSnapshot(data){
     dislikes: data.dislikes || [],
     suggestions: data.suggestions || []
   });
-  if(history.length > 24) history.shift();
-  const histOk = await storageSetJSON('reviewlens_hist_' + slug, history);
+  const kept = window.__p2pPruneMonthly ? window.__p2pPruneMonthly(history, 24) : history.slice(-24);
+  const histOk = await storageSetJSON('reviewlens_hist_' + slug, kept);
   if(!histOk) return { success: false, reason: 'Could not save this check-in. Try again.' };
   return { success: true, slug };
 }
@@ -1258,9 +1258,20 @@ function renderReport(data){
       window.__p2pProgress.animate(reportEl);
     });
   }
+  // Every assessment is saved automatically (one per calendar month, latest kept, up to 24).
+  const autoSaved = (async () => {
+    try{
+      if(!data || !data.name) return null;
+      const r = await saveBusinessSnapshot(data);
+      const b = document.getElementById('saveBizBtn');
+      if(r && r.success && b){ b.textContent = '✓ Saved automatically — see My Businesses'; b.classList.add('saved'); b.disabled = true; }
+      return r;
+    }catch(e){ return null; }
+  })();
   if(window.__p2pForecast){
     (async () => {
       const slug = slugify(data.name);
+      await autoSaved;
       const hist = await storageGetJSON('reviewlens_hist_' + slug, []);
       if(!window.__p2pLast || window.__p2pLast.a !== data) return;
       const asp = data.aspects || [];
