@@ -68,6 +68,7 @@
     if (c === "rate_limited") return "You have reached today's SEO check limit. It resets daily.";
     if (c === "unreachable") return "We could not reach that website (" + (m || "no response") + "). Check the address and try again.";
     if (c === "not_html") return "That address did not return a web page.";
+    if (c === "http_530" || c === "http_1016" || c === "http_523") return "We could not find that website. Check the spelling of the address.";
     if (/^http_/.test(c || "")) return "The website answered with an error (" + c.replace("http_", "") + "). Some sites block automated checks; if the site works in your browser, this check cannot see it.";
     if (c === "not_found") return "The SEO checker is not switched on yet. Update the Worker with the latest code first.";
     return "The SEO check could not be completed just now. Please try again.";
