@@ -117,7 +117,7 @@
       run(el.querySelector(".gp-body"), opts, m);
     });
   }
-  function run(root, opts, m) {
+  function run(root, opts, m, initialId) {
     var state = { plans: [], cur: null, svc: [], busy: false, msg: "" };
     function setMsg(t, ok) { state.msg = t ? '<p class="' + (ok ? "gp-ok" : "gp-err") + '">' + esc(t) + "</p>" : ""; }
     function loadList() { return Promise.all([rpc("list_plans", { p_slug: opts.slug }), services()]).then(function (r) { state.plans = r[0] || []; state.svc = r[1] || []; }, function (e) { setMsg((e && e.message) || "Could not load plans."); }); }
@@ -224,7 +224,42 @@
         rpc("delete_plan", { p_id: p.id }).then(function () { state.cur = null; loadList().then(listView); }, function (e) { flash((e && e.message) || "Could not delete.", false); });
       });
     }
-    loadList().then(listView);
+    if (initialId) loadList().then(function () { open(initialId); }); else loadList().then(listView);
+  }
+
+  // ---------- all Game Plans (menu) ----------
+  var pdlg = null;
+  function openPlans() {
+    me().then(function (m) {
+      if (STAFF.indexOf(m.role) < 0) return;
+      if (!pdlg) { pdlg = document.createElement("dialog"); pdlg.className = "p2x-modal gp-dlg"; document.body.appendChild(pdlg); }
+      var all = [], f = "all";
+      function stat(p) { return p.status !== "sent" ? "draft" : (p.open_count > 0 ? "opened" : "sent"); }
+      function chip(p) { var k = stat(p); return '<span class="gp-tag gp-st-' + k + '">' + (k === "draft" ? "Draft" : k === "sent" ? "Sent" : "Opened ×" + p.open_count) + (p.status === "sent" && !p.share_enabled ? " · link off" : "") + "</span>"; }
+      function draw() {
+        var cnt = { all: all.length, draft: 0, sent: 0, opened: 0 }; all.forEach(function (p) { cnt[stat(p)]++; });
+        var rows = all.filter(function (p) { return f === "all" || stat(p) === f; });
+        var h = '<div class="p2x-body"><h3>Game Plans</h3><div class="gp-chips">' + ["all", "draft", "sent", "opened"].map(function (k) { return '<button type="button" class="gp-f' + (k === f ? " on" : "") + '" data-f="' + k + '">' + k[0].toUpperCase() + k.slice(1) + " (" + cnt[k] + ")</button>"; }).join("") + "</div>";
+        h += rows.length ? '<div class="gp-list">' + rows.map(function (p) {
+          return '<div class="gp-item"><div style="min-width:0"><b>' + esc(p.business_name) + "</b> " + chip(p) + '<br><span class="gp-sm">v' + p.version + " · " + (p.status === "sent" ? "sent " + fmtD(p.sent_at) + (p.recipient_email ? " to " + esc(p.recipient_email) : "") + (p.last_opened_at ? " · last opened " + fmtD(p.last_opened_at) : "") : "updated " + fmtD(p.updated_at)) + (CATADMIN.indexOf(m.role) >= 0 && p.created_by ? " · by " + esc(p.created_by) : "") + '</span></div><button type="button" class="p2x-btn ghost" data-o="' + p.id + '">Open</button></div>';
+        }).join("") + "</div>" : '<p class="p2x-note">' + (all.length ? "No plans in this view." : "No Game Plans yet. Open a business report and use the Game Plan section to create one.") + "</p>";
+        h += '<div class="gp-acts"><button type="button" class="p2x-btn ghost" id="gpaClose">Close</button></div></div>';
+        pdlg.innerHTML = h;
+        pdlg.querySelector("#gpaClose").addEventListener("click", function () { pdlg.close(); });
+        pdlg.querySelectorAll("[data-f]").forEach(function (b) { b.addEventListener("click", function () { f = b.getAttribute("data-f"); draw(); }); });
+        pdlg.querySelectorAll("[data-o]").forEach(function (b) { b.addEventListener("click", function () { detail(b.getAttribute("data-o")); }); });
+      }
+      function detail(id) {
+        var p = all.filter(function (x) { return x.id === id; })[0]; if (!p) return;
+        pdlg.innerHTML = '<div class="p2x-body"><p class="soc-hint"><a href="#" id="gpaBack">‹ All Game Plans</a></p><div class="gp-body"></div></div>';
+        pdlg.querySelector("#gpaBack").addEventListener("click", function (e) { e.preventDefault(); reload(); });
+        var o = window.fcOpts ? window.fcOpts({ slug: p.business_slug, name: p.business_name, address: p.address }) : { slug: p.business_slug, name: p.business_name, address: p.address };
+        run(pdlg.querySelector(".gp-body"), o, m, id);
+      }
+      function reload() { pdlg.innerHTML = '<div class="p2x-body"><p class="p2x-note">Loading…</p></div>'; rpc("list_plans", {}).then(function (l) { all = l || []; draw(); }, function (e) { pdlg.innerHTML = '<div class="p2x-body"><p class="gp-err">' + esc((e && e.message) || "Could not load plans.") + '</p><div class="gp-acts"><button type="button" class="p2x-btn ghost" onclick="this.closest(\'dialog\').close()">Close</button></div></div>'; }); }
+      if (pdlg.showModal && !pdlg.open) pdlg.showModal();
+      reload();
+    });
   }
 
   var css = ".gp{margin:18px 0;border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}.gp-body{margin-top:10px}.gp input[type=text],.gp input[type=number],.gp textarea,.gp select,.gp-dlg input,.gp-dlg textarea,.gp-dlg select{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font:inherit;font-size:14px;background:#fff;color:inherit;margin:4px 0;min-width:0}.gp textarea,.gp-dlg textarea{resize:vertical}" +
@@ -232,7 +267,7 @@
     ".gp-sec{margin-top:18px;border-top:1px dashed var(--line);padding-top:12px}.gp-sec h4{margin:0 0 6px;font:700 13px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}.gp-l{display:block;font-size:12.5px;font-weight:600;margin-top:10px}.gp-two,.gp-three{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.gp-three{grid-template-columns:repeat(3,minmax(0,1fr))}.gp-two b.g{color:#1D9E75}.gp-two b.r{color:#C24A34}" +
     ".gp-pri{display:flex;gap:10px;margin:10px 0}.gp-n{flex:0 0 26px;height:26px;border-radius:50%;background:#fff0d9;color:#c26a00;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px;margin-top:6px}.gp-pb{flex:1;min-width:0}.gp-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.gp-row label{font-size:12.5px;font-weight:600;min-width:0}.gp-grow{flex:1 1 220px}.gp-row select{width:auto;max-width:100%}.gp-grow select{width:100%}" +
     ".gp-big{display:flex;flex-direction:column;font-size:12px;color:var(--ink-soft);min-width:80px}.gp-big b{font:700 30px 'Space Grotesk',sans-serif;color:var(--ink)}.gp-big input{width:90px;font:700 24px 'Space Grotesk',sans-serif}.gp-arrow{font-size:24px;color:var(--ink-soft)}.gp-inv>div{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #f0ebe1;font-size:14px}.gp-tot{font-weight:700;border-bottom:0!important}.gp-chk{display:flex;gap:8px;align-items:center;font-size:13px;margin:6px 0}.gp-chk input{width:auto!important}" +
-    ".gp-err{color:var(--warn);font-size:13.5px;margin:8px 0 0}.gp-ok{color:#047857;font-size:13.5px;margin:8px 0 0}.gp-form{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}.gp-dlg{max-width:640px;width:calc(100% - 24px)}@media(max-width:640px){.gp{padding:14px}.gp-two,.gp-three{grid-template-columns:1fr}}";
+    ".gp-err{color:var(--warn);font-size:13.5px;margin:8px 0 0}.gp-ok{color:#047857;font-size:13.5px;margin:8px 0 0}.gp-form{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}.gp-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.gp-f{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;font:600 12.5px inherit;font-family:inherit;cursor:pointer}.gp-f.on{background:#14161A;color:#fff;border-color:#14161A}.gp-st-draft{background:#EEE9DF}.gp-st-sent{background:#DDEBFF;color:#1B4F9C}.gp-st-opened{background:#DDF5E8;color:#0B7A55}.gp-dlg{max-width:640px;max-height:88vh;overflow:auto;width:calc(100% - 24px)}@media(max-width:640px){.gp{padding:14px}.gp-two,.gp-three{grid-template-columns:1fr}}";
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
-  window.__p2pGamePlan = { mount: mount, openCatalog: openCatalog, services: services };
+  window.__p2pGamePlan = { mount: mount, openCatalog: openCatalog, openPlans: openPlans, services: services };
 })();

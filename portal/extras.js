@@ -148,6 +148,11 @@
         gb.addEventListener("click", function () { dlg.close(); openAgencies(); });
         body.appendChild(gb);
       }
+      if (me.role === "super" || me.role === "admin" || me.role === "agency_admin" || me.role === "sales") {
+        var pb = el("button", { class: "p2x-btn ghost", type: "button" }, "Game Plans");
+        pb.addEventListener("click", function () { dlg.close(); if (window.__p2pGamePlan) window.__p2pGamePlan.openPlans(); });
+        body.appendChild(pb);
+      }
       if (me.role === "super" || me.role === "admin" || me.role === "agency_admin") {
         var cb = el("button", { class: "p2x-btn ghost", type: "button" }, "Service catalog");
         cb.addEventListener("click", function () { dlg.close(); if (window.__p2pGamePlan) window.__p2pGamePlan.openCatalog(); });
