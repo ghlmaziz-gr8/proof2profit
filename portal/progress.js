@@ -142,8 +142,9 @@
       if (prev && h.avgScore != null && prev.avgScore != null) d = h.avgScore - prev.avgScore;
       var el = document.createElement("div"); el.className = "p2p-ck";
       var tag = d == null ? "" : '<span class="p2p-chip" style="background:' + (d >= 3 ? COL.up : d <= -3 ? COL.down : COL.flat) + '">' + (d > 0 ? "▲ +" + d : d < 0 ? "▼ " + String(d).replace("-", "−") : "● 0") + "</span>";
-      el.innerHTML = '<button type="button" aria-expanded="false"><span class="d">' + dstr(h.ts) + "<small>" + (idx === n - 1 ? "Latest" : idx === 0 ? "First assessment" : "Assessment " + (idx + 1)) + '</small></span><span class="av">avg ' + (h.avgScore == null ? "—" : h.avgScore) + " · " + (h.rating == null ? "—" : h.rating) + "/5</span>" + tag + '<span class="car">›</span></button><div class="bd">' + checkinBody(h) + "</div>";
+      el.innerHTML = '<button type="button" aria-expanded="false"><span class="d">' + dstr(h.ts) + "<small>" + (idx === n - 1 ? "Latest" : idx === 0 ? "First assessment" : "Assessment " + (idx + 1)) + '</small></span><span class="av">avg ' + (h.avgScore == null ? "—" : h.avgScore) + " · " + (h.rating == null ? "—" : h.rating) + "/5</span>" + tag + '<span class="car">›</span></button><div class="bd">' + checkinBody(h) + '<button type="button" class="p2p-open" data-idx="' + idx + '" style="margin-top:10px;width:100%">View this full assessment</button></div>';
       var btn = el.querySelector("button");
+      var ob = el.querySelector(".p2p-open"); if (ob) ob.addEventListener("click", function () { if (window.__p2pOpenSaved) window.__p2pOpenSaved(idx); });
       btn.addEventListener("click", function () { var o = el.classList.toggle("open"); btn.setAttribute("aria-expanded", o ? "true" : "false"); });
       histMount.appendChild(el);
     });

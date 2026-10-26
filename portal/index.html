@@ -989,7 +989,8 @@ async function saveBusinessSnapshot(data){
     likes: data.likes || [],
     dislikes: data.dislikes || [],
     suggestions: data.suggestions || [],
-    engine: data._engine || null
+    engine: data._engine || null,
+    full: JSON.parse(JSON.stringify(Object.assign({}, data, { _viewing: undefined, _ts: undefined })))
   });
   const kept = window.__p2pPruneMonthly ? window.__p2pPruneMonthly(history, 24) : history.slice(-24);
   const histOk = await storageSetJSON('reviewlens_hist_' + slug, kept);
@@ -1107,7 +1108,8 @@ async function renderSavedDetail(slug){
       ${window.__p2pMy ? '' : `<p class="detail-name">${escHtml(biz.name)}</p><p class="detail-meta">${escHtml(biz.address || '')} · ${history.length} check-in${history.length !== 1 ? 's' : ''}</p>`}
       ${buildTrendLine(history)}
       ${computeBestAndDiff(history)}
-      <button id="recheckBtn" style="width:100%;margin-top:14px;">Re-check now</button>
+      <button id="openFullBtn" type="button" style="width:100%;margin-top:14px;">View full latest assessment</button>
+      <button id="recheckBtn" style="width:100%;margin-top:10px;">Re-check now</button>
       <div class="save-btn-row" style="margin-top:10px;"><button class="p2x-share-btn" type="button" data-export="saved" aria-haspopup="menu">⬇ Export history</button></div>
       <div id="p2pFcMount"></div>
       <div id="p2pSeoMount"></div>
@@ -1128,6 +1130,7 @@ async function renderSavedDetail(slug){
   if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
   if(window.__p2pMy) window.__p2pMy.animate(detailWrap);
+  document.getElementById('openFullBtn').addEventListener('click', () => window.__p2pOpenSaved(history.length - 1));
   document.getElementById('recheckBtn').addEventListener('click', async () => {
     const recheckBtn = document.getElementById('recheckBtn');
     recheckBtn.disabled = true;
@@ -1152,6 +1155,21 @@ async function renderSavedDetail(slug){
     }
   });
 }
+
+// Opens a saved assessment as the full report (everything that was saved with it).
+window.__p2pOpenSaved = function(idx){
+  const s = window.__p2pSaved; if(!s || !s.history[idx]) return;
+  const e = s.history[idx], biz = s.biz;
+  const data = e.full ? JSON.parse(JSON.stringify(e.full)) : {
+    name: biz.name, address: biz.address || '', rating: e.rating ?? null, review_count: e.review_count ?? null,
+    aspects: e.aspects || [], likes: e.likes || [], dislikes: e.dislikes || [], suggestions: e.suggestions || [], _grounded: e.rating != null
+  };
+  data._engine = data._engine || e.engine || null;
+  data._viewing = true; data._ts = e.ts;
+  switchTab('single');
+  renderReport(data);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
 function escHtml(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function contactHtml(d){
@@ -1214,7 +1232,7 @@ function renderReport(data){
     <div class="card">
       <p class="biz-name">${data.name || 'Unknown business'}${data._grounded ? ' <span class="best-badge" style="vertical-align:middle;">Live search</span>' : ''}</p>
       <p class="biz-addr">${data.address || ''}</p>
-      ${data._engine ? `<p class="p2p-eng">✨ Assessed by <b>${escHtml(data._engine)}</b></p>` : ''}
+      ${data._viewing ? `<p class="p2p-eng">📁 Saved assessment from <b>${escHtml(new Date(data._ts || Date.now()).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }))}</b>${data._engine ? ` · by <b>${escHtml(data._engine)}</b>` : ''}</p>` : (data._engine ? `<p class="p2p-eng">✨ Assessed by <b>${escHtml(data._engine)}</b></p>` : '')}
       ${contactHtml(data)}
 
       <div class="stat-grid">
@@ -1262,7 +1280,7 @@ function renderReport(data){
   window.__p2pLast = { kind: 'single', a: data };
   setState('report');
   if(window.__p2pProgress){
-    window.__p2pProgress.reportBanner(data, slugify, storageGetJSON).then(h => {
+    (data._viewing ? Promise.resolve('') : window.__p2pProgress.reportBanner(data, slugify, storageGetJSON)).then(h => {
       if(!h || !window.__p2pLast || window.__p2pLast.a !== data) return;
       const anchor = reportEl.querySelector('.section-label');
       if(!anchor) return;
@@ -1274,6 +1292,11 @@ function renderReport(data){
   const autoSaved = (async () => {
     try{
       if(!data || !data.name) return null;
+      if(data._viewing){
+        const b0 = document.getElementById('saveBizBtn');
+        if(b0){ b0.textContent = '✓ Saved on ' + new Date(data._ts || Date.now()).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' }); b0.classList.add('saved'); b0.disabled = true; }
+        return null;
+      }
       const r = await saveBusinessSnapshot(data);
       const b = document.getElementById('saveBizBtn');
       if(r && r.success && b){ b.textContent = '✓ Saved automatically — see My Businesses'; b.classList.add('saved'); b.disabled = true; }
@@ -1289,7 +1312,7 @@ function renderReport(data){
       const asp = data.aspects || [];
       const avgS = asp.length ? Math.round(asp.reduce((a, x) => a + Number(x.score || 0), 0) / asp.length) : null;
       const lastH = hist[hist.length - 1];
-      const cur = (lastH && Date.now() - lastH.ts < 10 * 60 * 1000) ? null : { ts: Date.now(), rating: data.rating == null ? null : data.rating, avgScore: avgS, aspects: asp, likes: data.likes || [], dislikes: data.dislikes || [] };
+      const cur = (data._viewing || (lastH && Date.now() - lastH.ts < 10 * 60 * 1000)) ? null : { ts: Date.now(), rating: data.rating == null ? null : data.rating, avgScore: avgS, aspects: asp, likes: data.likes || [], dislikes: data.dislikes || [] };
       const holder = document.createElement('div'); holder.id = 'p2pFcReport';
       const anchor = reportEl.querySelector('.save-btn-row');
       if(!anchor || !anchor.parentNode) return;
