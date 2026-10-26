@@ -67,7 +67,7 @@ $$;
 create or replace function public.share_email_html(p_who text, p_note text, p_kind text, p_a jsonb, p_b jsonb) returns text
 language plpgsql immutable set search_path = public as $fn$
 declare
-  body text := ''; head text; sub text; a jsonb; asp jsonb; nm text; sc numeric; sa numeric; sb_ numeric;
+  body text := ''; head text; sub text; sub_html text; a jsonb; asp jsonb; nm text; sc numeric; sa numeric; sb_ numeric;
   names text[]; k text; aw int := 0; bw int := 0; verdict text; learn text := ''; ln int := 0; an text; bn text;
 begin
   if p_kind = 'compare' then
@@ -114,6 +114,9 @@ begin
     a := p_a;
     head := coalesce(nullif(left(a ->> 'name', 80), ''), 'Business analysis');
     sub := coalesce(nullif(left(a ->> 'address', 120), ''), 'Review analysis');
+    if coalesce(a ->> 'address', '') <> '' then
+      sub_html := '<a href="https://www.google.com/maps/search/?api=1&amp;query=' || replace(regexp_replace(trim(left(a ->> 'address', 120)), '[^A-Za-z0-9 ,.-]', '', 'g'), ' ', '+') || '" style="color:#B9B4AA;text-decoration:none">' || public.p2p_esc(sub) || '</a>';
+    end if;
     body := '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
       || '<td width="50%" style="padding-right:6px"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">' || case when public.p2p_na(a ->> 'rating') is null and public.p2p_na(a ->> 'ai_rating') is not null then 'AI RATING' else 'RATING' end || '</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(coalesce(public.p2p_na(a ->> 'rating'), public.p2p_na(a ->> 'ai_rating'))) || '<span style="font-size:13px;color:#7A756C"> / 5</span>', '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td>'
       || '<td width="50%" style="padding-left:6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">' || case when public.p2p_na(a ->> 'review_count') is null and public.p2p_na(a ->> 'themes') is not null then 'THEMES FOUND' else 'REVIEW VOLUME' end || '</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(coalesce(public.p2p_na(a ->> 'review_count'), public.p2p_na(a ->> 'themes'))), '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td></tr></table>'
@@ -244,11 +247,11 @@ begin
     end if;
   end if;
 
-  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Proof to Profit</title></head><body style="margin:0;padding:0;background:#F3EEE6">'
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Proof to Profit</title><style>a[x-apple-data-detectors]{color:inherit!important;text-decoration:none!important}u+#body a{color:inherit;text-decoration:none}.hl a{color:#B9B4AA!important;text-decoration:none!important}</style></head><body id="body" style="margin:0;padding:0;background:#F3EEE6">'
     || '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#F3EEE6">' || public.p2p_esc(p_who) || ' shared a Proof to Profit report with you.</div>'
     || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EEE6"><tr><td align="center" style="padding:24px 12px">'
     || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#FFFFFF;border-radius:20px;overflow:hidden;border:1px solid #E6DFD3;font-family:Arial,Helvetica,sans-serif">'
-    || '<tr><td style="background:#14161A;padding:22px 28px"><div style="font-size:12px;letter-spacing:.16em;font-weight:bold;color:#F5B041">PROOF TO PROFIT</div><div style="font-size:24px;line-height:30px;font-weight:bold;color:#FFFFFF;margin-top:8px">' || public.p2p_esc(head) || '</div><div style="font-size:13px;color:#B9B4AA;margin-top:4px">' || public.p2p_esc(sub) || '</div></td></tr>'
+    || '<tr><td style="background:#14161A;padding:22px 28px"><div style="font-size:12px;letter-spacing:.16em;font-weight:bold;color:#F5B041">PROOF TO PROFIT</div><div style="font-size:24px;line-height:30px;font-weight:bold;color:#FFFFFF;margin-top:8px">' || public.p2p_esc(head) || '</div><div class="hl" style="font-size:13px;color:#B9B4AA;margin-top:4px">' || coalesce(sub_html, public.p2p_esc(sub)) || '</div></td></tr>'
     || '<tr><td style="padding:22px 28px 6px;font-size:14px;line-height:21px;color:#3B3A37"><b>' || public.p2p_esc(p_who) || '</b> shared this ' || case when p_kind = 'compare' then 'comparison' else 'analysis' end || ' with you.'
     || case when coalesce(trim(p_note), '') <> '' then '<div style="margin-top:12px;background:#FAF6EE;border:1px solid #E6DFD3;border-radius:12px;padding:12px 14px;color:#5E5A54">&ldquo;' || public.p2p_esc(left(trim(p_note), 400)) || '&rdquo;</div>' else '' end
     || '</td></tr>'
