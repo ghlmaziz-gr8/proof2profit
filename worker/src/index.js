@@ -464,7 +464,34 @@ function mapsStart(query) {
   }
   return "https://www.google.com/maps/search/" + encodeURIComponent(q) + "?hl=en&gl=us";
 }
-async function gmapsRead(query) {
+// Official Google Places API (needs the GOOGLE_PLACES_KEY secret). Returns the rating and total review count Google shows.
+async function placesRead(env, query) {
+  const q0 = String(query || "").trim();
+  let q = q0;
+  if (/^https?:\/\//i.test(q0)) {
+    const m = q0.match(/\/maps\/place\/([^/@?]+)/i);
+    if (m) { try { q = decodeURIComponent(m[1].replace(/\+/g, " ")); } catch { q = m[1].replace(/\+/g, " "); } }
+    else { try { q = new URL(q0).searchParams.get("q") || q0; } catch { q = q0; } }
+  }
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 9000);
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST", signal: ctl.signal,
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": env.GOOGLE_PLACES_KEY, "X-Goog-FieldMask": "places.displayName,places.rating,places.userRatingCount,places.formattedAddress" },
+      body: JSON.stringify({ textQuery: q.slice(0, 200), maxResultCount: 1, languageCode: "en" }),
+    });
+    if (!res.ok) return { found: false, placesStatus: res.status };
+    const d = await res.json().catch(() => null);
+    const p = d && d.places && d.places[0];
+    if (!p || (p.rating == null && p.userRatingCount == null)) return { found: false, placesStatus: 200 };
+    return { found: true, rating: p.rating != null ? Math.round(Number(p.rating) * 10) / 10 : null, review_count: p.userRatingCount != null ? Number(p.userRatingCount) : null, name: p.displayName && p.displayName.text || null, address: p.formattedAddress || null, source: "places" };
+  } catch { return { found: false, placesStatus: 0 }; } finally { clearTimeout(timer); }
+}
+async function gmapsRead(query, env) {
+  if (env && env.GOOGLE_PLACES_KEY) {
+    const pr = await placesRead(env, query);
+    if (pr.found) { pr.fetchedAt = Date.now(); return pr; }
+  }
   const start = mapsStart(query), tried = [];
   const isText = !/^https?:\/\//i.test(String(query || "").trim());
   const urls = [start]; if (isText) urls.push("https://www.google.com/search?hl=en&gl=us&q=" + encodeURIComponent(String(query).trim() + " reviews"));
@@ -753,7 +780,7 @@ export default {
       const u = await bump(env, token, "gmaps", parseInt(env.DAILY_GMAPS_LIMIT || "80", 10));
       if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
       if (u.error || !u.allowed) return json({ result: { found: false } }, 200, h);
-      try { return json({ result: await gmapsRead(body.query) }, 200, h); } catch (e) { return json({ result: { found: false } }, 200, h); }
+      try { return json({ result: await gmapsRead(body.query, env) }, 200, h); } catch (e) { return json({ result: { found: false } }, 200, h); }
     }
 
     if (path === "/social-assess") {
