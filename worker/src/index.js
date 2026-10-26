@@ -116,9 +116,12 @@ function errText(data, raw) {
   return String((e && (e.message || e)) || raw || "AI request failed").slice(0, 300);
 }
 // One call to the chosen engine. Returns { status, text, truncated, chunks, error }.
+/** @returns {Promise<any>} */
 async function runAI(env, eng, o) {
   const { prompt, json = true, maxTokens = 4096, temperature = 0.4, search = false } = o;
-  let url, headers, body, read;
+  let url, headers, read;
+  /** @type {any} */
+  let body;
   if (eng.kind === "gemini") {
     url = `${eng.base}/models/${eng.model}:generateContent`;
     headers = { "Content-Type": "application/json", "x-goog-api-key": eng.key };
