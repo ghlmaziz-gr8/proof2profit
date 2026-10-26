@@ -46,6 +46,7 @@
     function msg(e) {
       var c = e && e.code;
       if (c === "rate_limited") return "You have reached today's limit for AI social checks. It resets daily.";
+      if (c === "no_data") return "Not enough public information turned up for that account to assess it. Check the link, or try again later.";
       if (c === "not_found") return "The social assessor is not switched on yet. Update the Worker with the latest code first.";
       return "Could not assess that profile right now. Try again in a minute.";
     }
@@ -54,6 +55,7 @@
       pr.busy = true; draw(); err("");
       api("/social-assess", { url: pr.url }).then(function (r) {
         var R = r.result; pr.busy = false;
+        if (!R || !R.report) throw { code: "no_data" };
         pr.report = R.report; pr.direct = R.direct; pr.sources = R.sources || []; pr.ts = Date.now();
         pr.snaps = (pr.snaps || []).concat([{ ts: pr.ts, score: R.report.score, followers: R.report.followers }]).slice(-24);
         persist(); draw();

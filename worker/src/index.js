@@ -312,6 +312,8 @@ async function socialAssess(env, input) {
   const research = g1.status === 200 ? textOf(g1.data).trim() : "";
   const chunks = g1.data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
   const sources = chunks.map((c) => c.web?.title).filter(Boolean).slice(0, 4);
+  const haveDirect = !!(direct && direct.found);
+  if (!haveDirect && research.length < 80) throw { code: "no_data", message: "research status " + g1.status + (g1.data?.error?.message ? ": " + String(g1.data.error.message).slice(0, 160) : "") };
   const facts = direct && direct.found ? `Read directly from the profile page: followers ${direct.followers}, following ${direct.following ?? "unknown"}, posts ${direct.posts ?? "unknown"}, total likes ${direct.hearts ?? "unknown"}.` : "The profile page itself could not be read directly.";
   const prompt = `Respond with ONLY a single JSON object, no markdown. Never put a literal double-quote inside a string value.
 
@@ -422,7 +424,7 @@ export default {
         return json({ result: await socialAssess(env, body.url) }, 200, h);
       } catch (e) {
         const code = e && e.code ? e.code : "audit_failed";
-        return json({ error: code, message: (e && e.message) || "" }, code === "rate_limited" ? 429 : code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
+        return json({ error: code, message: (e && e.message) || "" }, code === "rate_limited" ? 429 : code === "no_data" ? 422 : code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
       }
     }
 
