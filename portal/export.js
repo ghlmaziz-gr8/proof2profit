@@ -51,21 +51,59 @@
       l("New concerns showing up", "r", c.newConcerns) + l("No longer coming up", "g", c.goneConcerns) + l("New strengths", "g", c.newStrengths) + l("Strengths that faded", "r", c.lostStrengths) + "</div>";
   }
 
-  function singleDoc(a, history) {
-    var ai = aiR(a), tn = themeN(a), hasR = na(a.rating) != null, hasC = na(a.review_count) != null;
-    var body = '<div class="card"><div class="st"><div><small>' + (hasR ? "RATING" : "AI RATING") + '</small><b>' + (hasR ? esc(a.rating) : esc(ai == null ? "–" : ai)) + ' <span style="font-size:13px;color:#7a756c">/ 5</span></b></div><div><small>' + (hasC ? "REVIEW VOLUME" : "THEMES FOUND") + '</small><b>' + (hasC ? esc(a.review_count) : esc(tn == null ? "–" : tn)) + "</b></div></div>" + ((!hasR || !hasC) ? '<p style="margin:12px 0 0;font-size:13px;color:#7a756c">AI rating is the average of the aspect scores out of 5, calculated by our AI from what guests say. It is an assessment, not Google\'s star rating.</p>' : "") + "</div>";
-    if (history && history.length && P()) {
-      var last = history[history.length - 1];
-      body += progressBlock(P().compare(last, { ts: Date.now(), rating: a.rating, avgScore: P().avgOf(a.aspects), aspects: a.aspects || [], likes: a.likes || [], dislikes: a.dislikes || [] }), "Compared with the assessment from " + dstr(last.ts) + ".");
-    }
-    body += '<div class="card"><h2>Aspect breakdown</h2>' + aspects(a.aspects) + "</div>";
+
+  var PLAT = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", youtube: "YouTube", x: "X", twitter: "X", linkedin: "LinkedIn" };
+  function engLine(e) { return e ? '<p style="margin:0;font-size:13px;color:#7a756c">Assessed by ' + esc(e) + "</p>" : ""; }
+  function olist(a) { return (a || []).length ? "<ol>" + a.slice(0, 8).map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ol>" : ""; }
+  function get(key) { var g = window.storageGetJSON; return typeof g === "function" ? g(key, null).catch(function () { return null; }) : Promise.resolve(null); }
+  function forecastCard(rec) {
+    var d = rec && rec.d; if (!d) return "";
+    function hz(t, o) { o = o || {}; return o.outlook ? "<h3>" + t + "</h3><p>" + esc(o.outlook) + "</p>" + ((o.drivers || []).length ? '<p class="g"><b>Likely drivers</b></p><ul>' + li(o.drivers) + "</ul>" : "") + ((o.risks || o.watch || []).length ? '<p class="r"><b>Watch out for</b></p><ul>' + li(o.risks || o.watch) + "</ul>" : "") : ""; }
+    return '<div class="card"><h2>Forecast · AI outlook</h2>' + (d.headline ? "<p><b>" + esc(d.headline) + "</b></p>" : "") + hz("Next month", d.next_month) + hz("Next 6 months", d.next_6_months) +
+      ((d.actions || []).length ? "<h3>Do this now</h3>" + olist(d.actions) : "") + (d.seasonal_note ? "<p><i>" + esc(d.seasonal_note) + "</i></p>" : "") +
+      '<p style="font-size:12px;color:#7a756c">Written ' + esc(dstr(rec.ts || Date.now())) + (d._engine ? " by " + esc(d._engine) : "") + ". A forecast, not a guarantee.</p></div>";
+  }
+  function seoCard(rec) {
+    if (!rec || rec.score == null) return "";
+    var cats = Object.keys(rec.cats || {}).filter(function (k) { return rec.cats[k] != null; }).map(function (k) { var v = rec.cats[k]; return '<div class="as"><div class="t"><div>' + esc(k) + '</div><span style="color:' + col(v) + '">' + v + '</span></div><div class="bar"><i style="width:' + v + "%;background:" + col(v) + '"></i></div></div>'; }).join("");
+    var d = rec.ai, ai = d ? "<h3>" + esc(d.headline || "AI action plan") + "</h3>" + ((d.quick_wins || []).length ? "<p><b>Quick wins (this week)</b></p>" + olist(d.quick_wins) : "") + ((d.this_month || []).length ? "<p><b>This month</b></p>" + olist(d.this_month) : "") + ((d.local_tips || []).length ? "<p><b>Local search tips</b></p><ul>" + li(d.local_tips) + "</ul>" : "") + (d._engine ? '<p style="font-size:12px;color:#7a756c">Written by ' + esc(d._engine) + ".</p>" : "") : "";
+    return '<div class="card"><h2>Website SEO check</h2><p><b style="font-size:24px;color:' + col(rec.score) + '">' + rec.score + '</b> <span style="color:#7a756c">/ 100 · ' + esc(rec.url || "") + " · checked " + esc(dstr(rec.ts || Date.now())) + "</span></p>" + cats + ai + "</div>";
+  }
+  function socialCard(rec) {
+    var ps = rec && rec.profiles || []; ps = ps.filter(function (p) { return p && p.report; }); if (!ps.length) return "";
+    return '<div class="card"><h2>Social media</h2>' + ps.map(function (p) {
+      var R = p.report, nm = PLAT[p.platform] || p.platform || "Profile";
+      return '<div style="margin-bottom:14px"><p><b>' + esc(nm) + "</b> @" + esc(p.handle || "") + ' · <b style="color:' + col(R.score) + '">' + esc(R.score) + "/100</b>" + (R.followers != null ? " · " + esc(R.followers) + " followers" : "") + (R.confidence ? " · confidence " + esc(R.confidence) : "") + "</p>" +
+        (R.headline ? "<p>" + esc(R.headline) + "</p>" : "") + (R.engagement ? "<p>" + esc(R.engagement) + "</p>" : "") + (R.posting ? "<p>" + esc(R.posting) + "</p>" : "") +
+        '<div class="two"><div><h3 class="g">What is working</h3><ul>' + li(R.strengths) + '</ul></div><div><h3 class="r">Gaps to close</h3><ul>' + li(R.gaps) + "</ul></div></div>" +
+        ((R.content_ideas || []).length ? "<h3>Post ideas</h3>" + olist(R.content_ideas) : "") + (p.engine ? '<p style="font-size:12px;color:#7a756c">Assessed by ' + esc(p.engine) + "</p>" : "") + "</div>";
+    }).join("") + "</div>";
+  }
+  function extras(slugStr) {
+    return Promise.all([get("reviewlens_fc_" + slugStr), get("reviewlens_seo_" + slugStr), get("reviewlens_social_" + slugStr)]).then(function (r) { return forecastCard(r[0]) + seoCard(r[1]) + socialCard(r[2]); });
+  }
+  function assessCards(a) {
+    var body = '<div class="card"><h2>Aspect breakdown</h2>' + aspects(a.aspects) + "</div>";
     body += '<div class="card"><h2 class="g">What guests love</h2><ul>' + li(a.likes) + '</ul><h2 class="r" style="margin-top:16px">Where it slips</h2><ul>' + li(a.dislikes) + "</ul></div>";
     if ((a.suggestions || []).length) body += '<div class="card"><h2>Suggested next steps</h2>' + a.suggestions.map(function (s, i) { return '<div class="n"><b>' + (i + 1) + "</b><div>" + esc(s) + "</div></div>"; }).join("") + "</div>";
     var o = a.seasonal_outlook || {};
     if (o.guidance || (o.rising || []).length || (o.watch || []).length) body += '<div class="card"><h2>Trend outlook</h2>' + (o.rising || []).map(function (x) { return '<span class="ch u">↑ ' + esc(x) + "</span>"; }).join("") + (o.watch || []).map(function (x) { return '<span class="ch d">↓ ' + esc(x) + "</span>"; }).join("") + (o.guidance ? "<p>" + esc(o.guidance) + "</p>" : "") + "</div>";
     var ideas = (a.campaign_ideas && a.campaign_ideas.ideas) || [];
     if (ideas.length) body += '<div class="card"><h2>Campaign ideas</h2>' + ideas.slice(0, 6).map(function (i) { return "<p><b>" + esc(i.title) + "</b>" + (i.format ? " <span class='ch'>" + esc(i.format) + "</span>" : "") + "<br>" + esc(i.angle) + (i.reasoning ? "<br><i>Why this: " + esc(i.reasoning) + "</i>" : "") + "</p>"; }).join("") + "</div>";
+    return body;
+  }
+
+  function singleDoc(a, history, ex) {
+    var ai = aiR(a), tn = themeN(a), hasR = na(a.rating) != null, hasC = na(a.review_count) != null;
+    var body = '<div class="card"><div class="st"><div><small>' + (hasR ? "RATING" : "AI RATING") + '</small><b>' + (hasR ? esc(a.rating) : esc(ai == null ? "–" : ai)) + ' <span style="font-size:13px;color:#7a756c">/ 5</span></b></div><div><small>' + (hasC ? "REVIEW VOLUME" : "THEMES FOUND") + '</small><b>' + (hasC ? esc(a.review_count) : esc(tn == null ? "–" : tn)) + "</b></div></div>" + ((!hasR || !hasC) ? '<p style="margin:12px 0 0;font-size:13px;color:#7a756c">AI rating is the average of the aspect scores out of 5, calculated by our AI from what guests say. It is an assessment, not Google\'s star rating.</p>' : "") + "</div>";
+    if (history && history.length && P()) {
+      var last = history[history.length - 1];
+      body += progressBlock(P().compare(last, { ts: Date.now(), rating: a.rating, avgScore: P().avgOf(a.aspects), aspects: a.aspects || [], likes: a.likes || [], dislikes: a.dislikes || [] }), "Compared with the assessment from " + dstr(last.ts) + ".");
+    }
+    body += assessCards(a);
+    body += (ex || "");
     var bits = [a.address || "Review analysis"]; if (a.website) bits.push(a.website); if (a.phone) bits.push(a.phone); if (a.last_review) bits.push("Last review: " + a.last_review);
+    if (a._engine) bits.push("Assessed by " + a._engine);
     return { html: wrap(a.name || "Business analysis", bits.join(" · "), body), name: slug(a.name) };
   }
 
@@ -90,7 +128,7 @@
     return { html: wrap((a.name || "A") + " vs " + (b.name || "B"), "Side-by-side review comparison", body), name: slug(a.name + "-vs-" + b.name) };
   }
 
-  function savedDoc(biz, hist) {
+  function savedDoc(biz, hist, ex) {
     var n = hist.length, latest = hist[n - 1], body = "";
     var rows = hist.slice().reverse().map(function (h, k) {
       var i = n - 1 - k, d = i > 0 && h.avgScore != null && hist[i - 1].avgScore != null ? h.avgScore - hist[i - 1].avgScore : null;
@@ -102,17 +140,24 @@
     }
     var pts = hist.map(function (h) { return h.avgScore == null ? null : h.avgScore; });
     body += '<div class="card"><h2>Assessment history</h2><table><tr><th>Date</th><th>Avg score</th><th>Rating</th><th>Change</th></tr>' + rows + "</table></div>";
-    body += '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + aspects(latest.aspects) + '<h2 class="g" style="margin-top:14px">What guests love</h2><ul>' + li(latest.likes) + '</ul><h2 class="r" style="margin-top:14px">Where it slips</h2><ul>' + li(latest.dislikes) + "</ul></div>";
+    body += latest.full ? '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + (latest.engine ? engLine(latest.engine) : "<p style='margin:0;font-size:13px;color:#7a756c'>Full detail follows.</p>") + "</div>" + assessCards(latest.full) : '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + aspects(latest.aspects) + '<h2 class="g" style="margin-top:14px">What guests love</h2><ul>' + li(latest.likes) + '</ul><h2 class="r" style="margin-top:14px">Where it slips</h2><ul>' + li(latest.dislikes) + "</ul></div>";
+    body += (ex || "");
     return { html: wrap(biz.name, (biz.address ? biz.address + " · " : "") + n + " assessment" + (n === 1 ? "" : "s") + " on record", body), name: slug(biz.name) + "-history" };
   }
 
   function current(kind) {
     var L = window.__p2pLast, S = window.__p2pSaved;
     if (kind === "compare" && L && L.kind === "compare") return Promise.resolve(compareDoc(L.a, L.b));
-    if (kind === "saved" && S) return Promise.resolve(savedDoc(S.biz, S.history));
+    if (kind === "saved" && S) return extras(S.biz.slug || (window.slugify ? window.slugify(S.biz.name) : slug(S.biz.name))).then(function (ex) { return savedDoc(S.biz, S.history, ex); });
     if (kind === "single" && L && L.kind === "single") {
       var g = window.storageGetJSON, sl = window.slugify;
-      if (typeof g === "function" && typeof sl === "function") return g("reviewlens_hist_" + sl(L.a.name), []).then(function (h) { return singleDoc(L.a, h); }, function () { return singleDoc(L.a, []); });
+      if (typeof g === "function" && typeof sl === "function") {
+        var sg = sl(L.a.name);
+        return Promise.all([g("reviewlens_hist_" + sg, []).catch(function () { return []; }), extras(sg)]).then(function (r) {
+          var h = r[0] || []; if (L.a._viewing && L.a._ts) h = h.filter(function (x) { return x.ts < L.a._ts; });
+          return singleDoc(L.a, h, r[1]);
+        });
+      }
       return Promise.resolve(singleDoc(L.a, []));
     }
     return Promise.resolve(null);

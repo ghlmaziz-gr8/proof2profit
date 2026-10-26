@@ -209,6 +209,10 @@
   .stat-highlight .sh-label{font-size:12px;color:var(--ink-soft);margin:0 0 4px;}
   .stat-highlight .sh-value{font-size:15px;font-weight:600;font-family:'Space Grotesk',sans-serif;margin:0;}
   .stat-highlight .sh-sub{font-size:12.5px;color:var(--ink-soft);margin:4px 0 0;}
+  .an-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin-bottom:14px}.an-tiles div{background:var(--paper);border-radius:10px;padding:12px;text-align:center}.an-tiles b{display:block;font:700 22px 'Space Grotesk',sans-serif}.an-tiles span{font-size:12px;color:var(--ink-soft)}
+  .an-up{color:#1F9D74}.an-dn{color:#D9534F}.an-row{padding:10px 0;border-bottom:1px solid #eee}.an-row:last-child{border:0}.an-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}.an-top b{min-width:0;overflow-wrap:anywhere}.an-dl{font-size:12px;font-weight:700;color:var(--ink-soft);white-space:nowrap}.an-dl.an-up{color:#1F9D74}.an-dl.an-dn{color:#D9534F}
+  .an-bar{height:8px;border-radius:5px;background:var(--paper);overflow:hidden;margin:6px 0}.an-bar i{display:block;height:100%;border-radius:5px}.an-sub{font-size:12.5px;color:var(--ink-soft)}.an-note{font-size:12.5px;color:var(--ink-soft);margin:0 0 6px}.an-sh{font:700 12px 'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:12px 0 4px}
+  .an-asp{display:grid;grid-template-columns:minmax(80px,38%) 1fr 30px;gap:8px;align-items:center;font-size:13px}.an-asp span{overflow-wrap:anywhere}.an-asp em{font-style:normal;font-weight:700;text-align:right}.an-watch{background:#FDECEA;border-radius:10px;padding:12px 14px;margin-bottom:12px}.an-watch p{margin:0 0 4px;font-size:13.5px}
   .month-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
   .month-bar-label{width:70px;font-size:12px;color:var(--ink-soft);flex-shrink:0;}
   .month-bar-track{flex:1;height:16px;border-radius:4px;background:var(--paper);overflow:hidden;}
@@ -577,94 +581,58 @@ backFromAnalytics.addEventListener('click', () => {
 async function renderAnalytics(){
   const content = document.getElementById('analyticsContent');
   content.innerHTML = '<p class="saved-empty">Loading…</p>';
-
   const index = await storageGetJSON('reviewlens_saved_index', []);
   if(!index.length){
-    content.innerHTML = '<p class="saved-empty">No businesses tracked yet. Save one under Single business, then check in on it a few times to build up analytics here.</p>';
+    content.innerHTML = '<p class="saved-empty">No businesses tracked yet. Analyze a business and it is saved automatically. Come back after a few assessments to see trends here.</p>';
     return;
   }
-
-  const allSnaps = [];
+  const rows = [], all = [];
   for(const biz of index){
-    const history = await storageGetJSON('reviewlens_hist_' + biz.slug, []);
-    history.forEach(h => allSnaps.push({ ...h, bizName: biz.name }));
+    const hist = (await storageGetJSON('reviewlens_hist_' + biz.slug, [])).filter(h => h && h.ts).sort((a,b) => a.ts - b.ts);
+    if(!hist.length) continue;
+    const first = hist[0], last = hist[hist.length - 1], prev = hist.length > 1 ? hist[hist.length - 2] : null;
+    rows.push({ name: biz.name, first, last, prev, n: hist.length });
+    hist.forEach(h => all.push(h));
   }
-  if(!allSnaps.length){
-    content.innerHTML = '<p class="saved-empty">No check-ins recorded yet. Re-check a saved business to start building analytics.</p>';
+  if(!rows.length){
+    content.innerHTML = '<p class="saved-empty">No assessments recorded yet.</p>';
     return;
   }
-
-  let best = allSnaps[0], worst = allSnaps[0];
-  allSnaps.forEach(s => {
-    if((s.avgScore ?? -1) > (best.avgScore ?? -1)) best = s;
-    if((s.avgScore ?? 101) < (worst.avgScore ?? 101)) worst = s;
-  });
-
-  const monthMap = {};
-  allSnaps.forEach(s => {
-    const key = new Date(s.ts).toLocaleDateString('default', { month: 'short', year: 'numeric' });
-    if(!monthMap[key]) monthMap[key] = { count: 0, sum: 0, ts: s.ts };
-    monthMap[key].count++;
-    monthMap[key].sum += (s.avgScore ?? 0);
-  });
-  const months = Object.keys(monthMap).map(k => ({ label: k, count: monthMap[k].count, avg: Math.round(monthMap[k].sum / monthMap[k].count), ts: monthMap[k].ts }));
-  months.sort((a,b) => a.ts - b.ts);
-
-  let busiest = months[0], strongest = months[0], weakest = months[0];
-  months.forEach(m => {
-    if(m.count > busiest.count) busiest = m;
-    if(m.avg > strongest.avg) strongest = m;
-    if(m.avg < weakest.avg) weakest = m;
-  });
-  const maxCount = Math.max(...months.map(m => m.count));
-
-  const monthBars = months.map(m => `
-    <div class="month-bar-row">
-      <span class="month-bar-label">${m.label}</span>
-      <div class="month-bar-track"><div class="month-bar-fill" style="width:${(m.count/maxCount)*100}%;"></div></div>
-      <span class="month-bar-count">${m.count}</span>
-    </div>
-  `).join('');
-
-  const fmtDate = ts => new Date(ts).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  content.innerHTML = `
-    <p class="outlook-disclaimer" style="margin-bottom:16px;">Based on the ${allSnaps.length} check-in${allSnaps.length!==1?'s':''} you've run through P2P across ${index.length} business${index.length!==1?'es':''} — not a full historical review archive, since that data isn't publicly accessible.${!storageAvailable ? ' Cross-session saving isn\'t working right now, so this data is for the current session only and will reset if you close the app.' : ''}</p>
-
-    <div class="stat-highlight">
-      <p class="sh-label">Best check-in so far</p>
-      <p class="sh-value">${best.bizName} <span class="best-badge">${best.avgScore ?? '—'} avg</span></p>
-      <p class="sh-sub">${fmtDate(best.ts)}</p>
-    </div>
-
-    <div class="stat-highlight">
-      <p class="sh-label">Toughest check-in so far</p>
-      <p class="sh-value">${worst.bizName}</p>
-      <p class="sh-sub">${fmtDate(worst.ts)} · avg score ${worst.avgScore ?? '—'}</p>
-    </div>
-
-    <div class="stat-highlight">
-      <p class="sh-label">Busiest tracking month</p>
-      <p class="sh-value">${busiest.label} <span style="font-weight:400;color:var(--ink-soft);font-size:13px;">— ${busiest.count} check-in${busiest.count!==1?'s':''}</span></p>
-    </div>
-
-    <div class="stat-highlight">
-      <p class="sh-label">Strongest month tracked</p>
-      <p class="sh-value">${strongest.label}</p>
-      <p class="sh-sub">Average score ${strongest.avg}</p>
-    </div>
-
-    <div class="stat-highlight">
-      <p class="sh-label">Toughest month tracked</p>
-      <p class="sh-value">${weakest.label}</p>
-      <p class="sh-sub">Average score ${weakest.avg}</p>
-    </div>
-
-    <div class="list-block">
-      <p class="list-title">Check-ins by month</p>
-      ${monthBars}
-    </div>
-  `;
+  const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+  const scored = rows.filter(r => num(r.last.avgScore) != null);
+  const avgNow = scored.length ? Math.round(scored.reduce((s,r) => s + r.last.avgScore, 0) / scored.length) : null;
+  const delta = r => (r.prev && num(r.prev.avgScore) != null && num(r.last.avgScore) != null) ? r.last.avgScore - r.prev.avgScore : null;
+  const up = rows.filter(r => (delta(r) || 0) >= 2).length, down = rows.filter(r => (delta(r) || 0) <= -2).length;
+  const fmt = ts => new Date(ts).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
+  const arrow = d => d == null ? '<span class="an-dl">first</span>' : d >= 2 ? '<span class="an-dl an-up">▲ ' + d + '</span>' : d <= -2 ? '<span class="an-dl an-dn">▼ ' + Math.abs(d) + '</span>' : '<span class="an-dl">● steady</span>';
+  const ordered = rows.slice().sort((a,b) => (num(b.last.avgScore) ?? -1) - (num(a.last.avgScore) ?? -1));
+  const bizRows = ordered.map(r => {
+    const sc = num(r.last.avgScore);
+    return '<div class="an-row"><div class="an-top"><b>' + escHtml(r.name) + '</b>' + arrow(delta(r)) + '</div>' +
+      '<div class="an-bar"><i style="width:' + (sc == null ? 0 : Math.max(2, sc)) + '%;background:' + (sc == null ? '#ccc' : scoreColor(sc)) + '"></i></div>' +
+      '<div class="an-sub">' + (sc == null ? 'no score' : 'Score ' + sc + ' · ' + scoreLabel(sc)) + ' · ' + r.n + ' assessment' + (r.n === 1 ? '' : 's') + ' · last ' + escHtml(fmt(r.last.ts)) + '</div></div>';
+  }).join('');
+  // aspects across businesses (latest assessment of each)
+  const am = {};
+  rows.forEach(r => (r.last.aspects || []).forEach(a => { if(a && a.name && num(a.score) != null){ (am[a.name] = am[a.name] || []).push(a.score); } }));
+  const aspects = Object.keys(am).map(k => ({ k, v: Math.round(am[k].reduce((s,x) => s + x, 0) / am[k].length), n: am[k].length })).sort((a,b) => b.v - a.v);
+  const aspRow = a => '<div class="an-asp"><span>' + escHtml(a.k) + '</span><div class="an-bar"><i style="width:' + Math.max(2, a.v) + '%;background:' + scoreColor(a.v) + '"></i></div><em>' + a.v + '</em></div>';
+  const aspHtml = aspects.length ? '<div class="list-block"><p class="list-title">Across your businesses</p><p class="an-note">Average score per theme in each business’s latest assessment.</p>' +
+    '<p class="an-sh">Strongest</p>' + aspects.slice(0,3).map(aspRow).join('') +
+    (aspects.length > 3 ? '<p class="an-sh">Needs the most attention</p>' + aspects.slice(-3).reverse().map(aspRow).join('') : '') + '</div>' : '';
+  // monthly average (one assessment per business per month)
+  const mm = {};
+  all.forEach(h => { if(num(h.avgScore) == null) return; const d = new Date(h.ts), key = d.getFullYear() * 100 + d.getMonth(); (mm[key] = mm[key] || { ts: h.ts, s: [] }).s.push(h.avgScore); });
+  const months = Object.keys(mm).sort().map(k => ({ label: new Date(mm[k].ts).toLocaleDateString('default', { month: 'short', year: 'numeric' }), avg: Math.round(mm[k].s.reduce((a,b) => a + b, 0) / mm[k].s.length), n: mm[k].s.length }));
+  const monthHtml = months.length > 1 ? '<div class="list-block"><p class="list-title">Average score by month</p>' + months.map(m =>
+    '<div class="month-bar-row"><span class="month-bar-label">' + escHtml(m.label) + '</span><div class="month-bar-track"><div class="month-bar-fill" style="width:' + Math.max(2, m.avg) + '%;background:' + scoreColor(m.avg) + '"></div></div><span class="month-bar-count" style="width:30px">' + m.avg + '</span></div>').join('') + '</div>' : '';
+  const watch = rows.filter(r => (delta(r) || 0) <= -2 || (num(r.last.avgScore) != null && r.last.avgScore < 50));
+  const watchHtml = watch.length ? '<div class="an-watch"><p class="list-title" style="margin:0 0 6px">Needs attention</p>' + watch.map(r => '<p>' + escHtml(r.name) + ': ' + (delta(r) != null && delta(r) <= -2 ? 'down ' + Math.abs(delta(r)) + ' points since the last assessment' : 'score ' + r.last.avgScore + ', below 50') + '</p>').join('') + '</div>' : '';
+  content.innerHTML =
+    '<p class="outlook-disclaimer" style="margin-bottom:14px">Your portfolio at a glance, from the assessments saved automatically for each business (one per month, newest 24).</p>' +
+    '<div class="an-tiles"><div><b>' + rows.length + '</b><span>Businesses</span></div><div><b>' + all.length + '</b><span>Assessments</span></div><div><b>' + (avgNow == null ? '—' : avgNow) + '</b><span>Avg score now</span></div><div><b class="an-up">▲ ' + up + '</b><span>Improving</span></div><div><b class="an-dn">▼ ' + down + '</b><span>Slipping</span></div></div>' +
+    watchHtml +
+    '<div class="list-block"><p class="list-title">Your businesses, best to weakest</p>' + bizRows + '</div>' + aspHtml + monthHtml;
 }
 
 function setState(state){

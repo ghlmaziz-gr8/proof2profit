@@ -113,6 +113,43 @@ begin
     if coalesce(a -> 'seasonal_outlook' ->> 'guidance', '') <> '' then
       body := body || public.p2p_h('Trend outlook') || '<p style="margin:0;font-size:14px;line-height:21px;color:#3B3A37">' || public.p2p_esc(left(a -> 'seasonal_outlook' ->> 'guidance', 500)) || '</p>';
     end if;
+    if jsonb_typeof(a -> 'seasonal_outlook' -> 'rising') = 'array' and jsonb_array_length(a -> 'seasonal_outlook' -> 'rising') > 0 then
+      body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#0B6B54">Rising</div>' || public.p2p_li(a -> 'seasonal_outlook' -> 'rising', '#1F9D74');
+    end if;
+    if jsonb_typeof(a -> 'seasonal_outlook' -> 'watch') = 'array' and jsonb_array_length(a -> 'seasonal_outlook' -> 'watch') > 0 then
+      body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#B4442F">Watch</div>' || public.p2p_li(a -> 'seasonal_outlook' -> 'watch', '#D9534F');
+    end if;
+    if jsonb_typeof(a -> 'campaign_ideas') = 'array' and jsonb_array_length(a -> 'campaign_ideas') > 0 then
+      body := body || public.p2p_h('Campaign ideas');
+      for asp in select value from jsonb_array_elements(a -> 'campaign_ideas') limit 4 loop
+        body := body || '<p style="margin:0 0 10px;font-size:14px;line-height:20px;color:#3B3A37"><b>' || public.p2p_esc(coalesce(left(asp ->> 'title', 100), '')) || '</b><br>' || public.p2p_esc(coalesce(left(asp ->> 'angle', 300), '')) || '</p>';
+      end loop;
+    end if;
+    if jsonb_typeof(a -> 'extras' -> 'forecast') = 'object' then
+      body := body || public.p2p_h('Forecast');
+      if coalesce(a -> 'extras' -> 'forecast' ->> 'headline', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#14161A"><b>' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'headline', 200)) || '</b></p>'; end if;
+      if coalesce(a -> 'extras' -> 'forecast' ->> 'next_month', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b>Next month:</b> ' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'next_month', 400)) || '</p>'; end if;
+      if coalesce(a -> 'extras' -> 'forecast' ->> 'next_6_months', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b>Next 6 months:</b> ' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'next_6_months', 400)) || '</p>'; end if;
+      body := body || public.p2p_li(a -> 'extras' -> 'forecast' -> 'actions', '#E8943A');
+    end if;
+    if jsonb_typeof(a -> 'extras' -> 'seo') = 'object' then
+      sc := nullif(a -> 'extras' -> 'seo' ->> 'score', '')::numeric;
+      body := body || public.p2p_h('Website SEO check') || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b style="font-size:20px;color:' || public.p2p_score_color(coalesce(sc, 0)) || '">' || coalesce(sc::text, '–') || '</b> / 100 &middot; ' || public.p2p_esc(coalesce(left(a -> 'extras' -> 'seo' ->> 'url', 120), '')) || '</p>';
+      if coalesce(a -> 'extras' -> 'seo' ->> 'headline', '') <> '' then body := body || '<p style="margin:0 0 6px;font-size:14px;line-height:21px;color:#3B3A37">' || public.p2p_esc(left(a -> 'extras' -> 'seo' ->> 'headline', 200)) || '</p>'; end if;
+      body := body || public.p2p_li(a -> 'extras' -> 'seo' -> 'quick_wins', '#E8943A');
+    end if;
+    if jsonb_typeof(a -> 'extras' -> 'social') = 'array' and jsonb_array_length(a -> 'extras' -> 'social') > 0 then
+      body := body || public.p2p_h('Social media');
+      for asp in select value from jsonb_array_elements(a -> 'extras' -> 'social') limit 4 loop
+        body := body || '<p style="margin:0 0 10px;font-size:14px;line-height:20px;color:#3B3A37"><b>' || public.p2p_esc(coalesce(left(asp ->> 'platform', 20), '')) || ' @' || public.p2p_esc(coalesce(left(asp ->> 'handle', 60), '')) || '</b> &middot; <b style="color:' || public.p2p_score_color(coalesce(nullif(asp ->> 'score', '')::numeric, 0)) || '">' || coalesce(nullif(asp ->> 'score', ''), '–') || '/100</b><br>' || public.p2p_esc(coalesce(left(asp ->> 'headline', 250), '')) || '</p>';
+      end loop;
+    end if;
+    if coalesce(a ->> 'engine', '') <> '' then
+      body := body || '<p style="margin:22px 0 0;font-size:12px;color:#7A756C">Assessed by ' || public.p2p_esc(left(a ->> 'engine', 80)) || '.</p>';
+    end if;
+    if coalesce(a ->> 'website', '') <> '' or coalesce(a ->> 'phone', '') <> '' then
+      body := body || '<p style="margin:6px 0 0;font-size:12px;color:#7A756C">' || public.p2p_esc(concat_ws(' · ', nullif(left(a ->> 'website', 120), ''), nullif(left(a ->> 'phone', 40), ''))) || '</p>';
+    end if;
   end if;
 
   return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Proof to Profit</title></head><body style="margin:0;padding:0;background:#F3EEE6">'

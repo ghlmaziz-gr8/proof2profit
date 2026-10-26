@@ -49,8 +49,25 @@
     return {
       name: String(r.name || "").slice(0, 80), address: String(r.address || "").slice(0, 120), rating: r.rating == null ? null : r.rating, review_count: r.review_count == null ? null : String(r.review_count),
       aspects: asp, likes: strs(r.likes, 6), dislikes: strs(r.dislikes, 6), suggestions: strs(r.suggestions, 6),
-      seasonal_outlook: { guidance: String((r.seasonal_outlook && r.seasonal_outlook.guidance) || "").slice(0, 500) }
+      seasonal_outlook: { guidance: String((r.seasonal_outlook && r.seasonal_outlook.guidance) || "").slice(0, 500), rising: strs(r.seasonal_outlook && r.seasonal_outlook.rising, 5), watch: strs(r.seasonal_outlook && r.seasonal_outlook.watch, 5) },
+      campaign_ideas: ((r.campaign_ideas && r.campaign_ideas.ideas) || []).slice(0, 4).map(function (i) { return { title: String(i.title || "").slice(0, 100), angle: String(i.angle || "").slice(0, 300) }; }),
+      engine: r._engine ? String(r._engine).slice(0, 80) : "", website: String(r.website || "").slice(0, 120), phone: String(r.phone || "").slice(0, 40)
     };
+  }
+  function kv(key) { var g = window.storageGetJSON; return typeof g === "function" ? g(key, null).catch(function () { return null; }) : Promise.resolve(null); }
+  function t(v, n) { return String(v == null ? "" : v).slice(0, n); }
+  // forecast / SEO / social summaries saved for this business (single analysis only)
+  function extrasFor(last) {
+    if (last.kind !== "single" || !last.a || typeof window.slugify !== "function") return Promise.resolve(null);
+    var sg = window.slugify(last.a.name);
+    return Promise.all([kv("reviewlens_fc_" + sg), kv("reviewlens_seo_" + sg), kv("reviewlens_social_" + sg)]).then(function (r) {
+      var fc = r[0] && r[0].d, seo = r[1], soc = r[2], x = {};
+      if (fc) x.forecast = { headline: t(fc.headline, 200), next_month: t(fc.next_month && fc.next_month.outlook, 400), next_6_months: t(fc.next_6_months && fc.next_6_months.outlook, 400), actions: (fc.actions || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(fc._engine, 80) };
+      if (seo && seo.score != null) x.seo = { score: Number(seo.score) || 0, url: t(seo.url, 120), headline: t(seo.ai && seo.ai.headline, 200), quick_wins: ((seo.ai && seo.ai.quick_wins) || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(seo.ai && seo.ai._engine, 80) };
+      var ps = (soc && soc.profiles || []).filter(function (p) { return p && p.report; }).slice(0, 4);
+      if (ps.length) x.social = ps.map(function (p) { return { platform: t(p.platform, 20), handle: t(p.handle, 60), score: Number(p.report.score) || 0, headline: t(p.report.headline, 250), engine: t(p.engine, 80) }; });
+      return Object.keys(x).length ? x : null;
+    }, function () { return null; });
   }
 
   function addFrom(input) {
@@ -124,7 +141,7 @@
       msg.textContent = ""; send.disabled = true; send.textContent = "Sending…";
       var sb = window.__p2p && window.__p2p.sb;
       if (!sb) { msg.style.color = "#b91c1c"; msg.textContent = "Not signed in."; send.disabled = false; send.textContent = "Send email"; return; }
-      sb.rpc("share_report", { p_to: recips, p_note: ta.value.trim(), p_kind: last.kind, p_a: slim(last.a), p_b: isCmp ? slim(last.b) : null, p_copy: cp.checked }).then(function (r) {
+      extrasFor(last).then(function (ex) { var pa = slim(last.a); if (ex) pa.extras = ex; return sb.rpc("share_report", { p_to: recips, p_note: ta.value.trim(), p_kind: last.kind, p_a: pa, p_b: isCmp ? slim(last.b) : null, p_copy: cp.checked }); }).then(function (r) {
         if (r.error) {
           var m = String(r.error.message || "");
           msg.style.color = "#b91c1c";
