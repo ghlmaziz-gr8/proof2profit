@@ -437,8 +437,10 @@
       var bars = $$(".bar-fill", card).map(function (b) { return parseFloat(b.style.width) || 0; });
       var avg = bars.length ? Math.round(bars.reduce(function (a, b) { return a + b; }, 0) / bars.length) : null;
 
-      var aiRating = null;
-      if (isNaN(rating) && avg != null) { aiRating = Math.max(1, Math.min(5, Math.round(avg / 20 * 10) / 10)); rating = aiRating; }
+      var aiRating = null, gRating = isNaN(rating) ? null : rating;
+      // The big number is always our own AI rating (the overall business health score on a 5-star scale).
+      // Google's star rating is shown next to it, never in its place.
+      if (avg != null) { aiRating = Math.max(1, Math.min(5, Math.round(avg / 20 * 10) / 10)); rating = aiRating; }
       var themes = 0, nLove = 0, nSlip = 0;
       $$(":scope > .list-block", card).forEach(function (lb) { var t = ($(".list-title", lb) || {}).textContent || ""; var n = $$("li", lb).length; if (/love/i.test(t)) { nLove = n; themes += n; } else if (/slips/i.test(t)) { nSlip = n; themes += n; } });
       var aspInfo = $$(".aspect", card).map(function (a) { var nm = $(".aspect-top span", a); var bf = $(".bar-fill", a); return { name: nm ? nm.textContent.trim() : "", score: bf ? Math.round(parseFloat(bf.style.width) || 0) : 0, el: a }; });
@@ -468,6 +470,8 @@
       if (useThemes) { kb.dataset.count = themes; kb.dataset.dec = 0; } else if (revMissing) kb.style.fontSize = "0.72em";
       if (!useThemes && !isNaN(revNum) && /^[\d,]+$/.test(revTxt)) { kb.dataset.count = revNum; kb.dataset.dec = 0; } else if (!isNaN(revNum)) { kb.textContent = revTxt; }
       k1.appendChild(kb); kp.appendChild(k1);
+      var kg = null;
+      if (gRating != null && gRating > 0) { kg = h("div", "enh-kpi", "<small>Google rating</small>"); kg.appendChild(h("b", "", gRating.toFixed(1))); kp.appendChild(kg); }
       if (avg != null) {
         var k2 = h("div", "enh-kpi", "<small>Avg score</small>"); var b2 = h("b", "", RM ? avg : "0"); b2.dataset.count = avg; b2.dataset.dec = 0; k2.appendChild(b2); kp.appendChild(k2);
         var k3 = h("div", "enh-kpi", "<small>Aspects</small>"); var b3 = h("b", "", String(bars.length)); k3.appendChild(b3); kp.appendChild(k3);
@@ -493,10 +497,12 @@
         aspects: ["Aspects: " + aspInfo.length,
           "<p><b>What it means:</b> the topics guests talk about most for this kind of business. Here: <b>" + aspInfo.map(function (a) { return a.name; }).join(", ") + "</b>.</p><p><b>How each is scored:</b> 0–100, based on how positive the feedback on that topic is. Tap any bar below to see why it got its score.</p>"]
       };
+      if (kg) EX.google = ["Google rating: " + gRating.toFixed(1) + " out of 5",
+        "<p><b>What it means:</b> the star rating the public gave this business on Google Maps.</p><p><b>How we use it:</b> it is one input to the Reviews part of our overall business health score, together with what guests say in their reviews. Our AI rating is the overall health score on the same 5-star scale.</p>"];
       hero.__ex = EX; hero.__isAI = aiRating != null;
       function openEx(k) { var e = EX[k]; if (e) explain(e[0], e[1]); }
       function mk(el, k) { if (!el) return; el.classList.add("enh-tap"); el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", "What does this mean? " + el.textContent.trim()); el.addEventListener("click", function () { openEx(k); }); el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEx(k); } }); var i = h("i", "enh-i", "i"); el.appendChild(i); }
-      mk(ring, "rating"); mk(k1, "reviews"); if (typeof k2 !== "undefined" && k2) mk(k2, "avg"); if (typeof k3 !== "undefined" && k3) mk(k3, "aspects");
+      mk(ring, "rating"); mk(k1, "reviews"); if (kg) mk(kg, "google"); if (typeof k2 !== "undefined" && k2) mk(k2, "avg"); if (typeof k3 !== "undefined" && k3) mk(k3, "aspects");
       aspInfo.forEach(function (a) {
         a.el.classList.add("enh-tap"); a.el.tabIndex = 0; a.el.setAttribute("role", "button");
         var go = function () { explain(a.name + ": " + a.score + " out of 100 (" + band(a.score).split(" (")[0] + ")", "<p><b>What it means:</b> how positive guest feedback is about <b>" + a.name + "</b>. Higher is better.</p><p><b>How it is scored:</b> our AI reads the feedback on this topic and rates it 0–100. 85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention.</p><p><b>This one:</b> " + a.score + " = <b>" + band(a.score) + "</b>. It counts for " + Math.round(100 / aspInfo.length) + "% of the average score.</p>"); };
