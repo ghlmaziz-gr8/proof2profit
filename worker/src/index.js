@@ -223,7 +223,78 @@ async function seoAudit(input, opts = {}) {
   return out;
 }
 
-export { seoAudit };
+// ---------- Social profile reader ----------
+// Reads only what a public profile page shows without logging in. Hosts and handles are fixed per platform (no free-form URLs).
+function parseCount(t) {
+  if (t == null) return null;
+  const m = String(t).replace(/,/g, "").trim().match(/^([\d.]+)\s*([KMB])?/i);
+  if (!m) return null;
+  const mult = { K: 1e3, M: 1e6, B: 1e9 }[(m[2] || "").toUpperCase()] || 1;
+  return Math.round(parseFloat(m[1]) * mult);
+}
+function socialTarget(input) {
+  let raw = String(input || "").trim();
+  if (!raw || raw.length > 200) throw { code: "bad_url" };
+  if (/^@?[\w.]+$/.test(raw) && !raw.includes("/")) throw { code: "bad_url" };
+  if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+  let u; try { u = new URL(raw); } catch { throw { code: "bad_url" }; }
+  const h = u.hostname.toLowerCase().replace(/^(www|m|mobile)\./, "");
+  const seg = u.pathname.split("/").filter(Boolean);
+  const clean = (x) => String(x || "").replace(/^@/, "");
+  if (h === "instagram.com" || h === "instagr.am") { const n = clean(seg[0]); if (!/^[A-Za-z0-9._]{1,30}$/.test(n) || /^(p|reel|reels|explore|stories|accounts|tv)$/i.test(n)) throw { code: "bad_url" }; return { platform: "instagram", handle: n, url: "https://www.instagram.com/" + n + "/" }; }
+  if (h === "tiktok.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9._]{2,24}$/.test(n) || !String(seg[0] || "").startsWith("@")) throw { code: "bad_url" }; return { platform: "tiktok", handle: n, url: "https://www.tiktok.com/@" + n }; }
+  if (h === "facebook.com" || h === "fb.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9.\-]{3,60}$/.test(n) || /^(profile\.php|pages|groups|watch|share|sharer|story\.php)$/i.test(n)) throw { code: "bad_url" }; return { platform: "facebook", handle: n, url: "https://www.facebook.com/" + n + "/" }; }
+  if (h === "youtube.com" || h === "youtu.be") { const n = seg[0] && seg[0].startsWith("@") ? clean(seg[0]) : null; if (!n || !/^[A-Za-z0-9._\-]{2,60}$/.test(n)) throw { code: "bad_url" }; return { platform: "youtube", handle: n, url: "https://www.youtube.com/@" + n }; }
+  if (h === "x.com" || h === "twitter.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9_]{1,15}$/.test(n) || /^(home|i|search|explore|intent|share)$/i.test(n)) throw { code: "bad_url" }; return { platform: "x", handle: n, url: "https://x.com/" + n }; }
+  throw { code: "unsupported_platform" };
+}
+function metaContent(html, key) {
+  for (const m of html.matchAll(/<meta\b[^>]*>/gi)) { const a = attrs(m[0]); if ((a.property || a.name || "").toLowerCase() === key && a.content != null) return a.content.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#39;|&#x27;/g, "'"); }
+  return null;
+}
+function readSocial(t, html) {
+  const out = { platform: t.platform, handle: t.handle, url: t.url, found: false };
+  const desc = metaContent(html, "og:description") || metaContent(html, "description") || "";
+  const title = metaContent(html, "og:title") || (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "";
+  out.name = stripTags(title).replace(/\s*[(•|\-–].*$/, "").slice(0, 80) || null;
+  out.snippet = stripTags(desc).slice(0, 240);
+  if (t.platform === "instagram") {
+    const m = desc.match(/([\d.,]+[KMB]?)\s+Followers?,\s*([\d.,]+[KMB]?)\s+Following,\s*([\d.,]+[KMB]?)\s+Posts?/i);
+    if (m) { out.followers = parseCount(m[1]); out.following = parseCount(m[2]); out.posts = parseCount(m[3]); out.found = true; }
+  } else if (t.platform === "tiktok") {
+    const j = html.match(/<script[^>]*id=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (j) { try { const d = JSON.parse(j[1]); const u = d?.["__DEFAULT_SCOPE__"]?.["webapp.user-detail"]?.userInfo; const st = u?.stats || u?.statsV2; if (st) { out.followers = Number(st.followerCount); out.following = Number(st.followingCount); out.posts = Number(st.videoCount); out.hearts = Number(st.heartCount); out.verified = !!u?.user?.verified; out.name = u?.user?.nickname || out.name; out.found = Number.isFinite(out.followers); } } catch {} }
+    if (!out.found) { const m = desc.match(/([\d.,]+[KMB]?)\s+Followers?[^\d]+([\d.,]+[KMB]?)\s+Likes?/i); if (m) { out.followers = parseCount(m[1]); out.hearts = parseCount(m[2]); out.found = true; } }
+  } else if (t.platform === "facebook") {
+    const m = desc.match(/([\d.,]+[KMB]?)\s+likes?/i), n = desc.match(/([\d.,]+[KMB]?)\s+talking about this/i), f = desc.match(/([\d.,]+[KMB]?)\s+followers?/i);
+    if (m || f) { out.followers = parseCount((f || m)[1]); out.likes = m ? parseCount(m[1]) : null; out.talking = n ? parseCount(n[1]) : null; out.found = true; }
+  } else if (t.platform === "youtube") {
+    const s = html.match(/"subscriberCountText"\s*:\s*\{[^}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+\s*[KMB]?)\s+subscribers?/i) || html.match(/([\d.,]+[KMB]?)\s+subscribers?/i);
+    const v = html.match(/"videosCountText"\s*:\s*\{[^}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+[KMB]?)\s+videos?/i) || html.match(/([\d.,]+)\s+videos?\b/i);
+    if (s) { out.followers = parseCount(s[1]); out.posts = v ? parseCount(v[1]) : null; out.found = true; }
+  }
+  for (const k of ["followers", "following", "posts", "hearts", "likes", "talking"]) if (out[k] != null && !Number.isFinite(out[k])) delete out[k];
+  return out;
+}
+async function socialAudit(input) {
+  const t = socialTarget(input);
+  const ua = t.platform === "instagram" || t.platform === "facebook" ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+  let page;
+  try {
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 9000);
+    const res = await fetch(t.url, { redirect: "follow", signal: ctl.signal, headers: { "User-Agent": ua, "Accept-Language": "en-US,en;q=0.9", Accept: "text/html,application/xhtml+xml" } });
+    const body = await readCapped(res, 1500000); clearTimeout(timer);
+    page = { status: res.status, finalUrl: res.url || t.url, html: body.text };
+  } catch (e) { throw { code: "unreachable", message: String((e && e.message) || e) }; }
+  const loginWall = /\/accounts\/login|login_required|"loginRequired"|Log in to continue|captcha|verify you are human/i.test(page.html.slice(0, 200000)) && !/og:description/i.test(page.html);
+  const out = readSocial(t, page.html);
+  out.status = page.status; out.fetchedAt = Date.now();
+  if (page.status === 404) out.error = "not_found_profile";
+  else if (!out.found) out.error = loginWall || page.status === 403 || page.status === 429 ? "blocked" : "no_public_stats";
+  return out;
+}
+
+export { seoAudit, socialAudit, socialTarget, readSocial };
 
 export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(drain(env)); },
@@ -285,6 +356,19 @@ export default {
         200,
         h
       );
+    }
+
+    if (path === "/social") {
+      const u = await bump(env, token, "social", parseInt(env.DAILY_SOCIAL_LIMIT || "30", 10));
+      if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
+      if (u.error) return json({ error: "usage_check_failed" }, 502, h);
+      if (!u.allowed) return json({ error: "rate_limited" }, 429, h);
+      try {
+        return json({ result: await socialAudit(body.url) }, 200, h);
+      } catch (e) {
+        const code = e && e.code ? e.code : "audit_failed";
+        return json({ error: code, message: (e && e.message) || "" }, code === "bad_url" || code === "unsupported_platform" ? 400 : 502, h);
+      }
     }
 
     if (path === "/seo") {
