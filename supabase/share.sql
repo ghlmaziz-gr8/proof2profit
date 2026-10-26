@@ -93,6 +93,21 @@ begin
       || '<td width="50%" style="padding-right:6px"><div style="background:#FFF4E2;border:1px solid #F3D9AC;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#C97A00;letter-spacing:.1em">RATING</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(public.p2p_na(a ->> 'rating')) || '<span style="font-size:13px;color:#7A756C"> / 5</span>', '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td>'
       || '<td width="50%" style="padding-left:6px"><div style="background:#E8F4F4;border:1px solid #BFDDDD;border-radius:14px;padding:14px"><div style="font-size:11px;font-weight:bold;color:#1F7A7A;letter-spacing:.1em">REVIEW VOLUME</div><div style="font-size:26px;font-weight:bold;color:#14161A">' || coalesce(public.p2p_escn(public.p2p_na(a ->> 'review_count')), '<span style="font-size:15px;color:#7A756C">Not available</span>') || '</div></div></td></tr></table>'
       || case when public.p2p_na(a ->> 'rating') is null or public.p2p_na(a ->> 'review_count') is null then '<p style="margin:12px 0 0;font-size:12.5px;line-height:18px;color:#7A756C">Rating and review count come from live Google data, which was not available for this business. The scores below are AI estimates.</p>' else '' end;
+    if jsonb_typeof(a -> 'extras' -> 'overall') = 'object' then
+      sc := nullif(a -> 'extras' -> 'overall' ->> 'score', '')::numeric;
+      body := body || public.p2p_h('Overall business health')
+        || '<p style="margin:0 0 10px;font-size:14px;line-height:21px;color:#3B3A37"><b style="font-size:30px;color:' || public.p2p_score_color(coalesce(sc, 0)) || '">' || coalesce(round(sc)::text, '–') || '</b> / 100 &middot; ' || public.p2p_score_label(coalesce(sc, 0))
+        || case when (a -> 'extras' -> 'overall' ->> 'complete') = 'true' then '' else ' &middot; provisional, not every area has been checked' end || '</p>';
+      if jsonb_typeof(a -> 'extras' -> 'overall' -> 'parts') = 'array' then
+        for asp in select value from jsonb_array_elements(a -> 'extras' -> 'overall' -> 'parts') limit 3 loop
+          sa := nullif(asp ->> 'score', '')::numeric; continue when sa is null;
+          body := body || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px"><tr><td style="font-size:13px;color:#3B3A37">' || public.p2p_esc(coalesce(left(asp ->> 'name', 30), '')) || ' <span style="color:#7A756C">(counts ' || coalesce(left(asp ->> 'weight', 3), '') || '%)</span></td><td align="right" style="font-size:13px;font-weight:bold;color:' || public.p2p_score_color(sa) || '">' || round(sa) || '</td></tr></table>' || public.p2p_bar(sa, public.p2p_score_color(sa));
+        end loop;
+      end if;
+      if coalesce(a -> 'extras' -> 'overall' ->> 'weak', '') <> '' and coalesce(nullif(a -> 'extras' -> 'overall' ->> 'gain', '')::numeric, 0) > 0 then
+        body := body || '<p style="margin:10px 0 0;font-size:13.5px;line-height:20px;color:#7A4A10;background:#FEF3E2;border-radius:10px;padding:10px 12px"><b>Biggest opening: ' || public.p2p_esc(left(a -> 'extras' -> 'overall' ->> 'weak', 30)) || '.</b> Getting it to 80 would lift the overall score by about ' || (a -> 'extras' -> 'overall' ->> 'gain') || ' points.</p>';
+      end if;
+    end if;
     body := body || public.p2p_h('Aspect breakdown');
     if jsonb_typeof(a -> 'aspects') = 'array' then
       for asp in select value from jsonb_array_elements(a -> 'aspects') limit 12 loop

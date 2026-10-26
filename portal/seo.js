@@ -156,7 +156,7 @@
         render(F, S);
         var oldHist = (saved && saved.hist) || (saved && saved.ts ? [{ ts: saved.ts, score: saved.score }] : []), nowTs = Date.now(), slim = {}; Object.keys(F).forEach(function (k) { if (k !== "text") slim[k] = F[k]; });
         var rec = { url: F.finalUrl, ts: nowTs, score: S.overall, F: slim, hist: window.__p2pPruneMonthly ? window.__p2pPruneMonthly(oldHist.concat([{ ts: nowTs, score: S.overall }]), 24) : oldHist.concat([{ ts: nowTs, score: S.overall }]).slice(-24), cats: S.cats.reduce(function (o, c) { o[c.name] = c.score; return o; }, {}) };
-        if (opts.save) opts.save(kvKey, rec);
+        if (opts.save) Promise.resolve(opts.save(kvKey, rec)).then(function () { window.dispatchEvent(new Event("p2p:signal")); }, function () { });
         saved = rec; showLast();
       }).catch(function (e) { out.innerHTML = '<p class="seo-err">' + esc(errMsg(e)) + "</p>"; })
         .then(function () { go.disabled = false; go.textContent = "Check SEO"; });

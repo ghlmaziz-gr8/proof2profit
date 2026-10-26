@@ -38,7 +38,7 @@
       '<form class="soc-form"><input type="text" class="soc-in" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="instagram.com/yourbusiness or tiktok.com/@yourbusiness" aria-label="Social profile link"><button type="submit" class="soc-go">Assess</button><div class="soc-opt"><label><span>Followers (optional)</span><input class="soc-fo" inputmode="decimal" autocomplete="off" placeholder="e.g. 2.4K"></label><label><span>Avg likes per post (optional)</span><input class="soc-lk" inputmode="decimal" autocomplete="off" placeholder="e.g. 85"></label></div></form><p class="soc-err" hidden></p><div class="soc-body"></div></section>';
     var root = el.querySelector(".soc"), inp = root.querySelector(".soc-in"), errEl = root.querySelector(".soc-err"), body = root.querySelector(".soc-body");
     function err(t) { errEl.textContent = t || ""; errEl.hidden = !t; }
-    function persist() { if (opts.save) opts.save(kvKey, data); }
+    function persist() { if (opts.save) Promise.resolve(opts.save(kvKey, data)).then(function () { window.dispatchEvent(new Event("p2p:signal")); }, function () { }); }
     function byId(id) { return data.profiles.filter(function (p) { return p.id === id; })[0]; }
     if (opts.load) Promise.resolve(opts.load(kvKey, null)).then(function (d) {
       if (d && d.profiles) { d.profiles = d.profiles.filter(function (p) { return p.report; }); data = d; draw(); }

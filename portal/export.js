@@ -79,8 +79,14 @@
         ((R.content_ideas || []).length ? "<h3>Post ideas</h3>" + olist(R.content_ideas) : "") + (p.engine ? '<p style="font-size:12px;color:#7a756c">Assessed by ' + esc(p.engine) + "</p>" : "") + "</div>";
     }).join("") + "</div>";
   }
-  function extras(slugStr) {
-    return Promise.all([get("reviewlens_fc_" + slugStr), get("reviewlens_seo_" + slugStr), get("reviewlens_social_" + slugStr)]).then(function (r) { return forecastCard(r[0]) + seoCard(r[1]) + socialCard(r[2]); });
+  function overallCard(a, seo, soc) {
+    var O = window.__p2pOverall; if (!O || !a) return ""; var c = O.compute(a, seo, soc); if (!c) return "";
+    return '<div class="card"><h2>Overall business health</h2><p><b style="font-size:30px;color:' + col(c.score) + '">' + c.score + '</b> <span style="color:#7a756c">/ 100 · ' + lab(c.score) + (c.complete ? "" : " · provisional, based on " + c.parts.length + " of 3 areas") + "</span></p>" +
+      c.parts.map(function (p) { return '<div class="as"><div class="t"><div>' + esc(p.name) + ' <span style="color:#7a756c;font-weight:400">(counts ' + p.weight + '%)</span></div><span style="color:' + col(p.score) + '">' + p.score + '</span></div><div class="bar"><i style="width:' + p.score + "%;background:" + col(p.score) + '"></i></div></div>'; }).join("") +
+      (c.weak && c.gain > 0 ? "<p><b>Biggest opening: " + esc(c.weak.name) + " (" + c.weak.score + ").</b> Getting it to 80 would lift the overall score by about " + c.gain + " point" + (c.gain === 1 ? "" : "s") + ".</p>" : "") + "</div>";
+  }
+  function extras(slugStr, a) {
+    return Promise.all([get("reviewlens_fc_" + slugStr), get("reviewlens_seo_" + slugStr), get("reviewlens_social_" + slugStr)]).then(function (r) { return { top: overallCard(a, r[1], r[2]), rest: forecastCard(r[0]) + seoCard(r[1]) + socialCard(r[2]) }; });
   }
   function assessCards(a) {
     var body = '<div class="card"><h2>Aspect breakdown</h2>' + aspects(a.aspects) + "</div>";
@@ -100,8 +106,8 @@
       var last = history[history.length - 1];
       body += progressBlock(P().compare(last, { ts: Date.now(), rating: a.rating, avgScore: P().avgOf(a.aspects), aspects: a.aspects || [], likes: a.likes || [], dislikes: a.dislikes || [] }), "Compared with the assessment from " + dstr(last.ts) + ".");
     }
-    body += assessCards(a);
-    body += (ex || "");
+    body += (ex && ex.top || "") + assessCards(a);
+    body += (ex && ex.rest || "");
     var bits = [a.address || "Review analysis"]; if (a.website) bits.push(a.website); if (a.phone) bits.push(a.phone); if (a.last_review) bits.push("Last review: " + a.last_review);
     if (a._engine) bits.push("Assessed by " + a._engine);
     return { html: wrap(a.name || "Business analysis", bits.join(" · "), body), name: slug(a.name) };
@@ -140,20 +146,20 @@
     }
     var pts = hist.map(function (h) { return h.avgScore == null ? null : h.avgScore; });
     body += '<div class="card"><h2>Assessment history</h2><table><tr><th>Date</th><th>Avg score</th><th>Rating</th><th>Change</th></tr>' + rows + "</table></div>";
-    body += latest.full ? '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + (latest.engine ? engLine(latest.engine) : "<p style='margin:0;font-size:13px;color:#7a756c'>Full detail follows.</p>") + "</div>" + assessCards(latest.full) : '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + aspects(latest.aspects) + '<h2 class="g" style="margin-top:14px">What guests love</h2><ul>' + li(latest.likes) + '</ul><h2 class="r" style="margin-top:14px">Where it slips</h2><ul>' + li(latest.dislikes) + "</ul></div>";
-    body += (ex || "");
+    body += (ex && ex.top || "") + (latest.full ? '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + (latest.engine ? engLine(latest.engine) : "<p style='margin:0;font-size:13px;color:#7a756c'>Full detail follows.</p>") + "</div>" + assessCards(latest.full) : '<div class="card"><h2>Latest assessment · ' + esc(dstr(latest.ts)) + "</h2>" + aspects(latest.aspects) + '<h2 class="g" style="margin-top:14px">What guests love</h2><ul>' + li(latest.likes) + '</ul><h2 class="r" style="margin-top:14px">Where it slips</h2><ul>' + li(latest.dislikes) + "</ul></div>");
+    body += (ex && ex.rest || "");
     return { html: wrap(biz.name, (biz.address ? biz.address + " · " : "") + n + " assessment" + (n === 1 ? "" : "s") + " on record", body), name: slug(biz.name) + "-history" };
   }
 
   function current(kind) {
     var L = window.__p2pLast, S = window.__p2pSaved;
     if (kind === "compare" && L && L.kind === "compare") return Promise.resolve(compareDoc(L.a, L.b));
-    if (kind === "saved" && S) return extras(S.biz.slug || (window.slugify ? window.slugify(S.biz.name) : slug(S.biz.name))).then(function (ex) { return savedDoc(S.biz, S.history, ex); });
+    if (kind === "saved" && S) return extras(S.biz.slug || (window.slugify ? window.slugify(S.biz.name) : slug(S.biz.name)), (S.history[S.history.length - 1] || {}).full || Object.assign({ name: S.biz.name }, S.history[S.history.length - 1] || {})).then(function (ex) { return savedDoc(S.biz, S.history, ex); });
     if (kind === "single" && L && L.kind === "single") {
       var g = window.storageGetJSON, sl = window.slugify;
       if (typeof g === "function" && typeof sl === "function") {
         var sg = sl(L.a.name);
-        return Promise.all([g("reviewlens_hist_" + sg, []).catch(function () { return []; }), extras(sg)]).then(function (r) {
+        return Promise.all([g("reviewlens_hist_" + sg, []).catch(function () { return []; }), extras(sg, L.a)]).then(function (r) {
           var h = r[0] || []; if (L.a._viewing && L.a._ts) h = h.filter(function (x) { return x.ts < L.a._ts; });
           return singleDoc(L.a, h, r[1]);
         });

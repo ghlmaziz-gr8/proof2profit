@@ -81,6 +81,7 @@
           x.progress = { head: t(c.head, 80), summary: t(c.summary, 300), since: t(new Date(prev.ts).toLocaleDateString("default", { month: "long", day: "numeric", year: "numeric" }), 30), verdict: t(c.verdict, 10),
             rows: (c.rows || []).slice(0, 12).map(function (q) { return { name: t(q.name, 40), prev: q.prev == null ? null : q.prev, cur: q.cur == null ? null : q.cur }; }), new_concerns: arr(c.newConcerns, 4, 200), gone_concerns: arr(c.goneConcerns, 4, 200), new_strengths: arr(c.newStrengths, 4, 200), lost_strengths: arr(c.lostStrengths, 4, 200) }; }
       } catch (e) { }
+      try { var O = window.__p2pOverall && window.__p2pOverall.compute(A, seo, soc); if (O) x.overall = { score: O.score, complete: O.complete, parts: O.parts.map(function (p) { return { name: t(p.name, 30), score: p.score, weight: p.weight }; }), weak: O.weak ? t(O.weak.name, 30) : "", weak_score: O.weak ? O.weak.score : null, gain: O.gain }; } catch (e) { }
       return Object.keys(x).length ? x : null;
     }, function () { return null; });
   }
