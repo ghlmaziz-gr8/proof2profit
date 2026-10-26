@@ -42,11 +42,13 @@
   ].join("");
   var st = el("style"); st.textContent = css; document.head.appendChild(st);
 
+  function aiRating(a) { var x = (a && a.aspects || []).map(function (q) { return Number(q.score); }).filter(function (v) { return !isNaN(v); }); return x.length ? Math.max(1, Math.min(5, Math.round(x.reduce(function (p, c) { return p + c; }, 0) / x.length / 20 * 10) / 10)) : null; }
   function slim(r) {
     if (!r) return null;
     var asp = (r.aspects || []).filter(function (a) { return a && a.name != null && a.score != null; }).slice(0, 12).map(function (a) { return { name: String(a.name).slice(0, 60), score: Number(a.score) }; });
     function strs(x, n) { return (x || []).slice(0, n).map(function (v) { return String(v).slice(0, 300); }); }
     return {
+      ai_rating: aiRating(r), themes: ((r.likes || []).length + (r.dislikes || []).length) || null,
       name: String(r.name || "").slice(0, 80), address: String(r.address || "").slice(0, 120), rating: r.rating == null ? null : r.rating, review_count: r.review_count == null ? null : String(r.review_count),
       aspects: asp, likes: strs(r.likes, 6), dislikes: strs(r.dislikes, 6), suggestions: strs(r.suggestions, 6),
       seasonal_outlook: { guidance: String((r.seasonal_outlook && r.seasonal_outlook.guidance) || "").slice(0, 500), rising: strs(r.seasonal_outlook && r.seasonal_outlook.rising, 5), watch: strs(r.seasonal_outlook && r.seasonal_outlook.watch, 5) },
@@ -67,7 +69,7 @@
       var F = null; try { var P = window.__p2pProgress; var cur = { ts: A._ts || Date.now(), rating: A.rating, avgScore: P ? P.avgOf(A.aspects) : null, aspects: A.aspects || [], likes: A.likes || [], dislikes: A.dislikes || [] }; F = window.__p2pForecast && window.__p2pForecast.build(hist, cur); } catch (e) { F = null; }
       if (F || fc) x.forecast = {
         headline: t(fc && fc.headline, 200), next_month: t(fc && fc.next_month && fc.next_month.outlook, 400), next_6_months: t(fc && fc.next_6_months && fc.next_6_months.outlook, 400), actions: arr(fc && fc.actions, 4), engine: t(fc && fc._engine, 80),
-        nums: F ? { now: Math.round(F.now), m1: F.m1.mid, m6: F.m6.mid, i1: F.i1.mid, i6: F.i6.mid, weak: (F.weak || []).slice(0, 2).map(function (v) { return t(v, 40); }), conf: t(F.conf, 10) } : null
+        nums: F ? { now: Math.round(F.now), m1: F.m1.mid, m6: F.m6.mid, i1: F.i1.mid, i6: F.i6.mid, stake: Math.round(F.now - F.m6.mid), momentum: !!F.momentum, n: F.n, weak: (F.weak || []).slice(0, 2).map(function (v) { return t(v, 40); }), conf: t(F.conf, 10), asp: (F.asp || []).slice(0, 8).map(function (a) { return { name: t(a.name, 30), now: Math.round(a.now), m1: a.m1.mid, m6: a.m6.mid, fix: a.weak ? a.i6.mid : null }; }) } : null
       };
       if (seo && seo.score != null) x.seo = { score: Number(seo.score) || 0, url: t(seo.url, 120), headline: t(seo.ai && seo.ai.headline, 200), quick_wins: arr(seo.ai && seo.ai.quick_wins, 4), this_month: arr(seo.ai && seo.ai.this_month, 4), local_tips: arr(seo.ai && seo.ai.local_tips, 3), engine: t(seo.ai && seo.ai._engine, 80),
         cats: Object.keys(seo.cats || {}).slice(0, 10).map(function (k) { return { name: t(k, 40), score: Number(seo.cats[k]) }; }).filter(function (c) { return !isNaN(c.score); }) };
