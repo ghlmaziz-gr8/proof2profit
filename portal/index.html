@@ -1236,6 +1236,7 @@ function renderReport(data){
         <div class="stat"><p class="label">Review volume</p><p class="value">${data.review_count ?? '—'}</p></div>
       </div>
 
+      ${(()=>{const rc=data.review_count,okRc=rc!=null&&rc!==''&&!/^(unknown|—|n\/a)$/i.test(String(rc)),okR=data.rating!=null&&Number(data.rating)>0;return (okR||okRc)?`<p class="p2p-eng" style="margin:10px 0 0;">⭐ ${okR?`Google rating <b>${escHtml(String(data.rating))}</b> / 5`:''}${okR&&okRc?' · ':''}${okRc?`<b>${escHtml(String(rc))}</b> Google reviews`:''}</p>`:''})()}
       <p class="section-label">Aspect breakdown</p>
       ${buildRadarSingle(data.aspects || [])}
       ${aspectsHtml}
