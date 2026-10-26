@@ -86,6 +86,33 @@
     } catch (e) {}
   }
 
+  // Tiles in the hero for Website SEO and each social platform, so every score is visible at the top.
+  var SOC4 = [["instagram", "Instagram"], ["tiktok", "TikTok"], ["facebook", "Facebook"], ["linkedin", "LinkedIn"]], SOCX = [["youtube", "YouTube"], ["x", "X"]];
+  function heroTiles(hero, seo, soc) {
+    try {
+      var kp = hero.querySelector(".enh-kpis"); if (!kp) return;
+      Array.prototype.forEach.call(kp.querySelectorAll("[data-x]"), function (n) { n.parentNode.removeChild(n); });
+      var profs = (soc && soc.profiles || []).filter(function (p) { return p && p.report && typeof p.report.score === "number"; });
+      function tile(key, name, val, go, plat) {
+        var d = document.createElement("div"); d.className = "enh-kpi enh-tap"; d.setAttribute("data-x", key); d.tabIndex = 0; d.setAttribute("role", "button");
+        d.innerHTML = "<small>" + esc(name) + "</small><b" + (val == null ? ' style="font-size:.72em;color:#BDB8AE"' : "") + ">" + (val == null ? "Not set up" : val) + "</b>";
+        d.setAttribute("aria-label", name + (val == null ? ": not set up yet" : ": " + val + " out of 100"));
+        function jump() {
+          if (plat) { try { window.dispatchEvent(new CustomEvent("p2p:social-platform", { detail: { platform: plat } })); } catch (e) {} }
+          var rep = document.getElementById("report"), t = rep && rep.querySelector(go); if (t) t.scrollIntoView({ behavior: RM ? "auto" : "smooth", block: "start" });
+        }
+        d.addEventListener("click", jump); d.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jump(); } });
+        kp.appendChild(d);
+      }
+      tile("seo", "Website SEO", seo && typeof seo.score === "number" ? Math.round(seo.score) : null, ".seo", null);
+      SOC4.concat(SOCX).forEach(function (pp) {
+        var ks = profs.filter(function (p) { return p.platform === pp[0]; });
+        if (!ks.length && SOCX.some(function (x) { return x[0] === pp[0]; })) return;
+        tile(pp[0], pp[1], ks.length ? Math.round(ks.reduce(function (a, p) { return a + p.report.score; }, 0) / ks.length) : null, ".soc", pp[0]);
+      });
+    } catch (e) {}
+  }
+
   var last = "", busy = false, timer = 0;
   function kv(k) { var g = window.storageGetJSON; return typeof g === "function" ? g(k, null).catch(function () { return null; }) : Promise.resolve(null); }
   function refresh(force) {
@@ -96,7 +123,7 @@
     var sg = window.slugify(L.a.name);
     Promise.all([kv("reviewlens_seo_" + sg), kv("reviewlens_social_" + sg)]).then(function (r) {
       var c = compute(L.a, r[0], r[1]); busy = false; if (!c) return;
-      var sig = sg + "|" + c.score + "|" + c.parts.map(function (p) { return p.key + p.score; }).join(",");
+      var sig = sg + "|" + c.score + "|" + c.parts.map(function (p) { return p.key + p.score; }).join(",") + "|" + ((r[1] && r[1].profiles) || []).map(function (p) { return p.platform + (p.report ? p.report.score : ""); }).join(",") + "|" + (r[0] && r[0].score);
       var card = rep.querySelector(".ov");
       if (card && !force && sig === last) return;
       last = sig;
@@ -104,6 +131,7 @@
       card.innerHTML = html(c);
       window.__p2pOverallNow = c;
       syncHero(hero, c);
+      heroTiles(hero, r[0], r[1]);
       var arc = card.querySelector(".arc"); requestAnimationFrame(function () { requestAnimationFrame(function () { if (arc) arc.style.strokeDashoffset = arc.getAttribute("data-off"); }); });
       var n = card.querySelector("[data-count]"); if (n && !RM) { var to = Number(n.getAttribute("data-count")), t0 = performance.now(); (function tick(t) { var p = Math.min(1, (t - t0) / 1100); n.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0); }
       card.querySelector(".ov-ring").addEventListener("click", function () { explain(c); });

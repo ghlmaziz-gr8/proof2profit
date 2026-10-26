@@ -384,6 +384,7 @@ function socialTarget(input) {
   if (h === "tiktok.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9._]{2,24}$/.test(n) || !String(seg[0] || "").startsWith("@")) throw { code: "bad_url" }; return { platform: "tiktok", handle: n, url: "https://www.tiktok.com/@" + n }; }
   if (h === "facebook.com" || h === "fb.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9.\-]{3,60}$/.test(n) || /^(profile\.php|pages|groups|watch|share|sharer|story\.php)$/i.test(n)) throw { code: "bad_url" }; return { platform: "facebook", handle: n, url: "https://www.facebook.com/" + n + "/" }; }
   if (h === "youtube.com" || h === "youtu.be") { const n = seg[0] && seg[0].startsWith("@") ? clean(seg[0]) : null; if (!n || !/^[A-Za-z0-9._\-]{2,60}$/.test(n)) throw { code: "bad_url" }; return { platform: "youtube", handle: n, url: "https://www.youtube.com/@" + n }; }
+  if (h === "linkedin.com") { const kind = String(seg[0] || "").toLowerCase(); const n = clean(seg[1]); if (!/^(company|school|showcase)$/.test(kind) || !/^[A-Za-z0-9._%\-]{2,100}$/.test(n)) throw { code: "bad_url" }; return { platform: "linkedin", handle: n, url: "https://www.linkedin.com/" + kind + "/" + n + "/" }; }
   if (h === "x.com" || h === "twitter.com") { const n = clean(seg[0]); if (!/^[A-Za-z0-9_]{1,15}$/.test(n) || /^(home|i|search|explore|intent|share)$/i.test(n)) throw { code: "bad_url" }; return { platform: "x", handle: n, url: "https://x.com/" + n }; }
   throw { code: "unsupported_platform" };
 }
@@ -407,6 +408,9 @@ function readSocial(t, html) {
   } else if (t.platform === "facebook") {
     const m = desc.match(/([\d.,]+[KMB]?)\s+likes?/i), n = desc.match(/([\d.,]+[KMB]?)\s+talking about this/i), f = desc.match(/([\d.,]+[KMB]?)\s+followers?/i);
     if (m || f) { out.followers = parseCount((f || m)[1]); out.likes = m ? parseCount(m[1]) : null; out.talking = n ? parseCount(n[1]) : null; out.found = true; }
+  } else if (t.platform === "linkedin") {
+    const f = desc.match(/([\d.,]+[KMB]?)\s+followers?/i) || html.match(/([\d.,]+[KMB]?)\s+followers?/i);
+    if (f) { out.followers = parseCount(f[1]); out.found = true; }
   } else if (t.platform === "youtube") {
     const s = html.match(/"subscriberCountText"\s*:\s*\{[^}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+\s*[KMB]?)\s+subscribers?/i) || html.match(/([\d.,]+[KMB]?)\s+subscribers?/i);
     const v = html.match(/"videosCountText"\s*:\s*\{[^}]*?"(?:simpleText|content)"\s*:\s*"([\d.,]+[KMB]?)\s+videos?/i) || html.match(/([\d.,]+)\s+videos?\b/i);
@@ -417,7 +421,7 @@ function readSocial(t, html) {
 }
 async function socialAudit(input) {
   const t = socialTarget(input);
-  const ua = t.platform === "instagram" || t.platform === "facebook" ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+  const ua = t.platform === "instagram" || t.platform === "facebook" || t.platform === "linkedin" ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
   let page;
   try {
     const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 9000);

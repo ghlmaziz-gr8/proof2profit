@@ -209,7 +209,7 @@
     " .enh-hero{grid-template-columns:auto minmax(0,1fr);padding:18px;gap:14px;margin:-10px -10px 20px}",
     " .enh-ring{width:92px;height:92px}.enh-ring .ct{font-size:24px}",
     " .enh-hero .biz-name{font-size:19px}",
-    " .enh-kpi{min-width:0;flex:1;padding:8px 10px}.enh-kpi b{font-size:18px}",
+    " .enh-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.enh-kpi{min-width:0;padding:8px 10px}.enh-kpi small{font-size:10px;letter-spacing:.05em;overflow-wrap:anywhere}.enh-kpi b{font-size:18px}",
     " .enh-hero .enh-text{grid-column:1/-1}",
     " .card{padding:18px!important}",
     " .enh-welcome{padding:22px}.enh-welcome h2{font-size:25px}",

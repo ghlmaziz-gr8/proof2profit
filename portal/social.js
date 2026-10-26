@@ -15,8 +15,15 @@
     tiktok: { name: "TikTok", color: "#111111", target: 16, er: [[1e4, 5, 10], [1e5, 4, 8], [Infinity, 3, 6]], erNote: "likes + comments per video, as a share of followers", where: "Open your last 10 videos. Add up likes and comments on each, then divide by 10." },
     facebook: { name: "Facebook", color: "#1877F2", target: 12, er: [[Infinity, 0.3, 0.9]], erNote: "reactions + comments per post, as a share of followers", where: "Open your last 10 posts. Add up reactions and comments, then divide by 10." },
     youtube: { name: "YouTube", color: "#E02020", target: 4, er: [[Infinity, 2, 4]], erNote: "likes + comments per video, as a share of subscribers", where: "Open your last 10 videos in YouTube Studio. Average the likes and comments." },
+    linkedin: { name: "LinkedIn", color: "#0A66C2", target: 8, er: [[Infinity, 1, 3]], erNote: "reactions + comments per post, as a share of followers", where: "Open your company page and look at your last 10 posts. Add up reactions and comments, then divide by 10." },
     x: { name: "X", color: "#14161A", target: 30, er: [[Infinity, 0.15, 0.6]], erNote: "likes + replies per post, as a share of followers", where: "Look at your last 10 posts. Add up likes and replies, then divide by 10." }
   };
+  var ORDER = ["instagram", "tiktok", "facebook", "linkedin", "youtube", "x"];
+  var PH = { instagram: "instagram.com/yourbusiness, or just @yourbusiness", tiktok: "tiktok.com/@yourbusiness, or just @yourbusiness", facebook: "facebook.com/yourpage, or just yourpage", linkedin: "linkedin.com/company/yourbusiness, or just yourbusiness", youtube: "youtube.com/@yourchannel, or just @yourchannel", x: "x.com/yourhandle, or just @yourhandle" };
+  function buildUrl(plat, raw) {
+    var v = String(raw || "").trim().replace(/^@/, ""); if (!v || /[\/.\s]/.test(v)) return null;
+    return { instagram: "https://www.instagram.com/" + v + "/", tiktok: "https://www.tiktok.com/@" + v, facebook: "https://www.facebook.com/" + v + "/", linkedin: "https://www.linkedin.com/company/" + v + "/", youtube: "https://www.youtube.com/@" + v, x: "https://x.com/" + v }[plat];
+  }
   function detect(input) {
     var raw = String(input || "").trim(); if (!raw) return null;
     if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
@@ -26,6 +33,7 @@
     if (h === "tiktok.com" && /^@[A-Za-z0-9._]{2,24}$/.test(seg[0] || "")) return { platform: "tiktok", handle: c(seg[0]), url: "https://www.tiktok.com/@" + c(seg[0]) };
     if (/^(facebook\.com|fb\.com)$/.test(h) && /^[A-Za-z0-9.\-]{3,60}$/.test(c(seg[0])) && !/^(profile\.php|pages|groups|watch|share|sharer|story\.php)$/i.test(c(seg[0]))) return { platform: "facebook", handle: c(seg[0]), url: "https://www.facebook.com/" + c(seg[0]) + "/" };
     if (/^(youtube\.com|youtu\.be)$/.test(h) && /^@[A-Za-z0-9._\-]{2,60}$/.test(seg[0] || "")) return { platform: "youtube", handle: c(seg[0]), url: "https://www.youtube.com/@" + c(seg[0]) };
+    if (h === "linkedin.com" && /^(company|school|showcase)$/i.test(seg[0] || "") && /^[A-Za-z0-9._%\-]{2,100}$/.test(c(seg[1]))) return { platform: "linkedin", handle: c(seg[1]), url: "https://www.linkedin.com/" + seg[0].toLowerCase() + "/" + c(seg[1]) + "/" };
     if (/^(x\.com|twitter\.com)$/.test(h) && /^[A-Za-z0-9_]{1,15}$/.test(c(seg[0])) && !/^(home|i|search|explore|intent|share)$/i.test(c(seg[0]))) return { platform: "x", handle: c(seg[0]), url: "https://x.com/" + c(seg[0]) };
     return null;
   }
@@ -34,9 +42,10 @@
   function mount(el, opts) {
     if (!el) return;
     var kvKey = "reviewlens_social_" + opts.slug, data = { profiles: [] };
-    el.innerHTML = '<section class="soc"><div class="soc-top"><p class="soc-eyebrow">Social media</p><h3>How well is your social media working?</h3><p class="soc-meta">Paste a profile link. The AI looks at what is publicly known about the account and scores its engagement and health. If you know your followers or average likes, add them to sharpen the result. Both are optional.</p></div>' +
-      '<form class="soc-form"><input type="text" class="soc-in" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="instagram.com/yourbusiness or tiktok.com/@yourbusiness" aria-label="Social profile link"><button type="submit" class="soc-go">Assess</button><div class="soc-opt"><label><span>Followers (optional)</span><input class="soc-fo" inputmode="decimal" autocomplete="off" placeholder="e.g. 2.4K"></label><label><span>Avg likes per post (optional)</span><input class="soc-lk" inputmode="decimal" autocomplete="off" placeholder="e.g. 85"></label></div></form><p class="soc-err" hidden></p><div class="soc-body"></div></section>';
-    var root = el.querySelector(".soc"), inp = root.querySelector(".soc-in"), errEl = root.querySelector(".soc-err"), body = root.querySelector(".soc-body");
+    el.innerHTML = '<section class="soc"><div class="soc-top"><p class="soc-eyebrow">Social media</p><h3>How well is your social media working?</h3><p class="soc-meta">Pick a platform, then paste the profile link or just the handle. The AI looks at what is publicly known about the account and scores its engagement and health. If you know your followers or average likes, add them to sharpen the result. Both are optional.</p></div>' +
+      '<div class="soc-tabs" role="tablist"></div><form class="soc-form"><input type="text" class="soc-in" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="instagram.com/yourbusiness" aria-label="Social profile link"><button type="submit" class="soc-go">Assess</button><div class="soc-opt"><label><span>Followers (optional)</span><input class="soc-fo" inputmode="decimal" autocomplete="off" placeholder="e.g. 2.4K"></label><label><span>Avg likes per post (optional)</span><input class="soc-lk" inputmode="decimal" autocomplete="off" placeholder="e.g. 85"></label></div></form><p class="soc-err" hidden></p><div class="soc-body"></div></section>';
+    var cur = "instagram";
+    var root = el.querySelector(".soc"), inp = root.querySelector(".soc-in"), tabsEl = root.querySelector(".soc-tabs"), errEl = root.querySelector(".soc-err"), body = root.querySelector(".soc-body");
     function err(t) { errEl.textContent = t || ""; errEl.hidden = !t; }
     function persist() { if (opts.save) Promise.resolve(opts.save(kvKey, data)).then(function () { window.dispatchEvent(new Event("p2p:signal")); }, function () { }); }
     function byId(id) { return data.profiles.filter(function (p) { return p.id === id; })[0]; }
@@ -69,10 +78,11 @@
 
     root.querySelector(".soc-form").addEventListener("submit", function (e) {
       e.preventDefault(); err("");
-      var d = detect(inp.value);
-      if (!d) { err("Use the link to the profile itself, like instagram.com/yourbusiness, tiktok.com/@yourbusiness, facebook.com/yourpage, youtube.com/@yourchannel or x.com/yourhandle."); return; }
+      var built = buildUrl(cur, inp.value), d = detect(built || inp.value);
+      if (!d) { err("Use the link to the " + PF[cur].name + " profile itself, or just its handle. Example: " + PH[cur] + "."); return; }
+      if (d.platform !== cur) { cur = d.platform; inp.placeholder = PH[cur]; }  // a link for another platform opens that platform's tab
       if (data.profiles.some(function (p) { return p.platform === d.platform && p.handle.toLowerCase() === d.handle.toLowerCase(); })) { err("That profile is already added."); return; }
-      if (data.profiles.length >= 6) { err("You can track up to 6 profiles."); return; }
+      if (data.profiles.length >= 12) { err("You can track up to 12 profiles."); return; }
       var hf = pnum(root.querySelector(".soc-fo").value), hl = pnum(root.querySelector(".soc-lk").value);
       if ((hf != null && (isNaN(hf) || hf <= 0)) || (hl != null && (isNaN(hl) || hl < 0))) { err("Numbers only, please. You can use K or M, like 2.4K."); return; }
       var pr = { id: "p" + Date.now(), platform: d.platform, handle: d.handle, url: d.url, snaps: [], hf: hf, hl: hl };
@@ -116,11 +126,17 @@
       return '<div class="soc-card">' + h + '</div>';
     }
     function draw() {
-      var ps = data.profiles, sc = ps.filter(function (p) { return p.report; });
+      var all = data.profiles, ps = all.filter(function (p) { return p.platform === cur; }), sc = all.filter(function (p) { return p.report; });
+      tabsEl.innerHTML = ORDER.filter(function (k) { return k !== "youtube" && k !== "x" || all.some(function (p) { return p.platform === k; }) || cur === k; }).map(function (k) {
+        var ks = all.filter(function (p) { return p.platform === k && p.report; }), av = ks.length ? Math.round(ks.reduce(function (a, p) { return a + p.report.score; }, 0) / ks.length) : null;
+        return '<button type="button" role="tab" class="soc-tab' + (k === cur ? " on" : "") + '" data-plat="' + k + '"><span class="soc-dot" style="background:' + PF[k].color + '"></span>' + PF[k].name + (av != null ? ' <b style="color:' + colr(av) + '">' + av + '</b>' : '') + '</button>';
+      }).join("");
+      tabsEl.querySelectorAll("[data-plat]").forEach(function (b) { b.addEventListener("click", function () { setPlat(b.getAttribute("data-plat")); }); });
       var overall = sc.length ? Math.round(sc.reduce(function (a, p) { return a + p.report.score; }, 0) / sc.length) : null, html = "";
-      if (!ps.length) html = '<p class="soc-empty">No profiles yet. Paste a link above to get started.</p>';
+      if (overall != null && sc.length > 1) html += '<button type="button" class="soc-all" data-k="all"><span>Overall social score</span><b style="color:' + colr(overall) + '">' + overall + '</b><em>' + label(overall) + '</em><i class="soc-i">i</i></button>';
+      if (!ps.length) html += '<p class="soc-empty">No ' + PF[cur].name + ' profile yet. Add one above.</p>';
       else {
-        if (overall != null && sc.length > 1) html += '<button type="button" class="soc-all" data-k="all"><span>Overall social score</span><b style="color:' + colr(overall) + '">' + overall + '</b><em>' + label(overall) + '</em><i class="soc-i">i</i></button>';
+        if (false) html += '<button type="button" class="soc-all" data-k="all"><span>Overall social score</span><b style="color:' + colr(overall) + '">' + overall + '</b><em>' + label(overall) + '</em><i class="soc-i">i</i></button>';
         var tg = 0, tn = 0; sc.forEach(function (p) { var g = growth(p); if (g) { tg += g.abs; tn++; } });
         if (tn) html += '<p class="soc-sumg ' + (tg > 0 ? "up" : tg < 0 ? "dn" : "") + '">' + (tg >= 0 ? "▲ " : "▼ ") + 'Across ' + tn + ' profile' + (tn === 1 ? "" : "s") + ': <b>' + signed(tg) + ' followers</b> since the previous assessment</p>';
         html += ps.map(card).join("");
@@ -129,6 +145,12 @@
       requestAnimationFrame(function () { requestAnimationFrame(function () { body.querySelectorAll(".arc").forEach(function (a) { a.style.strokeDashoffset = a.getAttribute("data-off"); }); }); });
       if (!RM) body.querySelectorAll("[data-count]").forEach(function (n) { var to = Number(n.getAttribute("data-count")), t0 = performance.now(); (function tick(t) { var p = Math.min(1, (t - t0) / 1000); n.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(tick); })(t0); });
     }
+    function setPlat(k) {
+      if (!PF[k]) return; cur = k; inp.placeholder = PH[k]; inp.value = ""; err(""); draw();
+    }
+    window.addEventListener("p2p:social-platform", function (ev) { var k = ev && ev.detail && ev.detail.platform; if (k && root.isConnected) setPlat(k); });
+    inp.placeholder = PH[cur];
+    draw();
     function wire() {
       body.querySelectorAll("[data-k]").forEach(function (b) { b.addEventListener("click", function () {
         var k = b.getAttribute("data-k");
@@ -148,7 +170,7 @@
   var css = ".soc{margin:18px 0;border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}.soc-eyebrow{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--coral-dark);font-weight:700}.soc h3{margin:2px 0 4px;font:700 19px 'Space Grotesk',sans-serif}.soc-meta{margin:0;font-size:12.5px;color:var(--ink-soft)}" +
     ".soc-form{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}.soc-in{flex:1 1 240px;min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;font-size:15px;background:#fff;color:var(--ink)}.soc-opt{flex:1 1 100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}.soc-opt span{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:3px}.soc-opt input{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px;background:#fff;color:var(--ink)}@media(max-width:600px){.soc-opt{grid-template-columns:1fr}}.soc-in:focus,.soc-nf input:focus{outline:2px solid var(--coral);outline-offset:1px}" +
     ".soc-go{background:var(--coral);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;min-height:0;width:auto}.soc-go.sm{padding:9px 14px;font-size:13.5px}.soc-go.ghost{background:#fff;color:var(--coral-dark);border:1px solid var(--coral)}.soc-go.ghost:hover{background:rgba(246,149,0,.1);color:var(--coral-dark)}.soc-go:disabled{opacity:.6;cursor:wait}" +
-    ".soc-err,.soc-err2{color:var(--warn);font-size:13.5px;margin:10px 0 0}.soc-empty,.soc-hint,.soc-fine{font-size:13px;color:var(--ink-soft);margin:10px 0 0}.soc-body{margin-top:6px}" +
+    ".soc-err,.soc-err2{color:var(--warn);font-size:13.5px;margin:10px 0 0}.soc-empty,.soc-hint,.soc-fine{font-size:13px;color:var(--ink-soft);margin:10px 0 0}.soc-body{margin-top:6px}.soc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}.soc-tab{display:inline-flex;align-items:center;gap:6px;background:#faf8f5;border:1px solid var(--line);border-radius:999px;padding:7px 12px;font:600 13.5px inherit;color:var(--ink);cursor:pointer;min-height:0;width:auto}.soc-tab.on{background:#1b1d22;color:#fff;border-color:#1b1d22}.soc-tab b{font-size:12.5px}.soc-dot{width:8px;height:8px;border-radius:50%;display:inline-block}" +
     ".soc-all{position:relative;display:flex;align-items:baseline;gap:10px;width:100%;background:linear-gradient(135deg,#1b1d22,#2a2118);color:#fff;border:0;border-radius:14px;padding:14px 34px 14px 16px;margin:14px 0 4px;min-height:0;text-align:left;cursor:pointer}.soc-all:hover{background:linear-gradient(135deg,#24272d,#35291c);color:#fff}.soc-all span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#FFD35A;font-weight:700;flex:1}.soc-all b{font:700 30px 'Space Grotesk',sans-serif}.soc-all em{font-style:normal;font-size:13px;color:rgba(255,255,255,.8)}" +
     ".soc-i{position:absolute;top:6px;right:7px;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;opacity:.5;font:italic 600 10px/12px Georgia,serif;text-align:center;font-style:italic;pointer-events:none}" +
     ".soc-card{border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:14px;background:#fff}.soc-ph{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.soc-badge{color:#fff;border-radius:999px;font-size:11.5px;font-weight:700;padding:3px 10px}.soc-h{font-weight:700;color:var(--ink);text-decoration:none;overflow-wrap:anywhere}.soc-h:hover{text-decoration:underline}.soc-ago{font-size:12px;color:var(--ink-soft);flex:1}.soc-x{background:none;border:0;color:var(--ink-soft);font-size:12px;min-height:0;width:auto;padding:4px 6px;cursor:pointer}.soc-x:hover{background:none;color:var(--warn)}" +
