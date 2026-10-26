@@ -75,7 +75,7 @@
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         if (r.ok) return d;
-        var code = /^(rate_limited|prompt_too_large|bad_url|blocked_host|unreachable|not_found|not_html|audit_failed)$/.test(d.error) ? d.error : "error";
+        var code = /^(rate_limited|prompt_too_large|bad_url|blocked_host|unreachable|not_found|not_html|audit_failed|unsupported_platform)$/.test(d.error) ? d.error : "error";
         var e = { code: code, message: d.message || d.error || "Request failed" };
         throw e;
       });

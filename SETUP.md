@@ -51,3 +51,6 @@ Run `supabase/share.sql` once in the Supabase SQL editor. It adds `share_report(
 
 ## Website SEO check
 - Worker endpoint `/seo` fetches a public homepage (SSRF-guarded: public http/https hosts only, ports 80/443, 6 redirects, 1.5 MB cap) and returns facts. Scoring lives in `portal/seo.js`. Limit: `DAILY_SEO_LIMIT` (default 20/day per user). Needs no new secrets; paste the updated `worker/src/index.js` into the p2p-api editor.
+
+## Social profile reader (`/social`)
+The Worker route `/social` reads public profile stats where a platform allows it (TikTok works; Instagram and Facebook block Cloudflare, YouTube and X show no stats). Anything blocked falls back to numbers typed in the portal. Optional variable: `DAILY_SOCIAL_LIMIT` (default 30 per user per day).

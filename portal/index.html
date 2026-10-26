@@ -457,6 +457,7 @@
 <script src="mybiz.js"></script>
 <script src="forecast.js"></script>
 <script src="seo.js"></script>
+<script src="social.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
@@ -1099,6 +1100,7 @@ async function renderSavedDetail(slug){
       <div class="save-btn-row" style="margin-top:10px;"><button class="p2x-share-btn" type="button" data-export="saved" aria-haspopup="menu">⬇ Export history</button></div>
       <div id="p2pFcMount"></div>
       <div id="p2pSeoMount"></div>
+      <div id="p2pSocMount"></div>
       <div class="list-block">
         <p class="list-title">Progress check</p>
         <div id="p2pProgressMount"></div>
@@ -1111,6 +1113,7 @@ async function renderSavedDetail(slug){
   `;
   if(window.__p2pForecast) window.__p2pForecast.mount(document.getElementById('p2pFcMount'), fcOpts({ slug, name: biz.name, address: biz.address, history }));
   if(window.__p2pSeo) window.__p2pSeo.mount(document.getElementById('p2pSeoMount'), fcOpts({ slug, name: biz.name, address: biz.address }));
+  if(window.__p2pSocial) window.__p2pSocial.mount(document.getElementById('p2pSocMount'), fcOpts({ slug, name: biz.name, address: biz.address }));
   if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
   if(window.__p2pMy) window.__p2pMy.animate(detailWrap);
@@ -1273,6 +1276,11 @@ function renderReport(data){
         const sh = document.createElement('div'); sh.id = 'p2pSeoReport';
         anchor.parentNode.insertBefore(sh, anchor);
         window.__p2pSeo.mount(sh, fcOpts({ slug, name: data.name, address: data.address, website: data.website || null }));
+      }
+      if(window.__p2pSocial){
+        const so = document.createElement('div'); so.id = 'p2pSocReport';
+        anchor.parentNode.insertBefore(so, anchor);
+        window.__p2pSocial.mount(so, fcOpts({ slug, name: data.name, address: data.address }));
       }
     })();
   }
