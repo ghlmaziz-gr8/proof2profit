@@ -133,6 +133,13 @@ function errText(data, raw) {
 /** @returns {Promise<any>} */
 async function runAI(env, eng, o) {
   const { prompt, json = true, maxTokens = 4096, temperature = 0.4, search = false } = o;
+  // Count this call against the engine's daily usage, and stop when its daily limit (set by an admin) is reached.
+  if (env.OUTBOX_SECRET && env.SUPABASE_URL) {
+    try {
+      const t = await sbRpc(env, "ai_usage_take", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model });
+      if (t.ok && t.data && t.data.allowed === false) return { status: 429, text: "", error: "The daily limit set for this AI engine (" + t.data.limit + " calls) has been reached. It resets at midnight UTC." };
+    } catch (e) { /* usage counting must never break the app */ }
+  }
   let url, headers, read;
   /** @type {any} */
   let body;
@@ -168,7 +175,7 @@ async function runAI(env, eng, o) {
     const b2 = { ...body }; delete b2.temperature; delete b2.response_format;
     x = await send(b2);
   }
-  if (!x.r.ok) return { status: x.r.status, text: "", error: errText(x.d, x.raw) };
+  if (!x.r.ok) { if (env.OUTBOX_SECRET && env.SUPABASE_URL) { try { await sbRpc(env, "ai_usage_fail", { p_secret: env.OUTBOX_SECRET, p_provider: eng.provider, p_model: eng.model }); } catch (e) { /* ignore */ } } return { status: x.r.status, text: "", error: errText(x.d, x.raw) }; }
   const out = read(x.d || {});
   return { status: 200, ...out };
 }
@@ -663,6 +670,19 @@ export default {
       const me = who.data;
       const scope = body.scope === "org" ? "org" : me.email;
       if (scope === "org" && !me.is_admin && path !== "/ai/info") return json({ error: "forbidden", message: "Only admins can change the organisation default." }, 403, h);
+      if (path === "/ai/usage") {
+        const r = await sbRpc(env, "ai_usage_info", {}, token);
+        if (!r.ok || !r.data) return json({ error: "audit_failed", message: "Usage is not set up yet." }, 502, h);
+        const eng = await activeEngine(env, me.email);
+        return json({ ...r.data, active: eng.provider + ":" + eng.model }, 200, h);
+      }
+      if (path === "/ai/limit") {
+        const lim = body.limit === null || body.limit === "" || body.limit === undefined ? null : Math.max(0, Math.floor(Number(body.limit)));
+        if (lim !== null && !Number.isFinite(lim)) return json({ error: "bad_config", message: "Enter a whole number, or leave it blank for no limit." }, 400, h);
+        const r = await sbRpc(env, "ai_limit_set", { p_engine: String(body.engine || ""), p_limit: lim }, token);
+        if (!r.ok) return json({ error: r.status === 403 || r.status === 401 ? "forbidden" : "audit_failed", message: r.status === 403 ? "Only admins can set limits." : "Could not save the limit." }, r.status === 403 ? 403 : 502, h);
+        return json({ ok: true }, 200, h);
+      }
       const mineOrOrg = scope === "org" ? me.org : me.mine;
       const pick = async () => {
         const p = PROVIDERS[String(body.provider || "")];

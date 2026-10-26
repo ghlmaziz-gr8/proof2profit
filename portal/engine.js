@@ -17,6 +17,41 @@
     now.appendChild(el("b", null, "In use now: "));
     now.appendChild(document.createTextNode((act.label || "Google Gemini") + " · " + (act.model || "") + (act.source === "default" ? " (platform default)" : act.source === "org" ? " (organisation default)" : " (your own)")));
     body.appendChild(now);
+    // Daily usage per engine, against the daily limit an admin has set for it.
+    var U = S.usage;
+    if (U) {
+      var ub = el("div", { class: "p2x-usage" });
+      ub.appendChild(el("b", null, "Daily usage"));
+      ub.appendChild(el("p", { class: "p2x-note", style: "margin:2px 0 8px" }, "Counts every AI call made through each engine, across the whole portal. Resets at midnight UTC."));
+      var byE = {}; (U.today || []).forEach(function (r) { byE[r.engine] = r; });
+      var engines = [U.active].concat(Object.keys(byE)).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var lims = {}; (U.limits || []).forEach(function (l) { lims[l.engine] = l.limit; });
+      var days = []; for (var i = 6; i >= 0; i--) { var d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10); days.push(d); }
+      engines.forEach(function (eg) {
+        var r = byE[eg] || { calls: 0, errors: 0, blocked: 0 }, lim = lims[eg] == null ? null : lims[eg];
+        var pct = lim ? Math.min(100, Math.round(r.calls / lim * 100)) : null, nm = eg.replace(":", " · ");
+        var card = el("div", { class: "p2x-ucard" });
+        var top = el("div", { class: "p2x-utop" }); top.appendChild(el("span", null, nm + (eg === U.active ? " (in use)" : ""))); top.appendChild(el("b", null, r.calls + (lim != null ? " / " + lim : "") + " today")); card.appendChild(top);
+        var bar = el("div", { class: "p2x-ubar" }); var fill = el("i", { style: "width:" + (pct == null ? Math.min(100, r.calls) : pct) + "%;background:" + (pct != null && pct >= 90 ? "#C24A34" : pct != null && pct >= 70 ? "#F69500" : "#1D9E75") }); bar.appendChild(fill); card.appendChild(bar);
+        card.appendChild(el("p", { class: "p2x-note", style: "margin:4px 0" }, (lim == null ? "No daily limit set. " : (lim - r.calls > 0 ? (lim - r.calls) + " calls left today. " : "Daily limit reached. ")) + r.errors + " failed" + (r.blocked ? ", " + r.blocked + " blocked by the limit" : "") + "."));
+        var mx = 1, series = days.map(function (dy) { var v = 0; (U.days || []).forEach(function (q) { if (q.engine === eg && String(q.day).slice(0, 10) === dy) v += q.calls; }); mx = Math.max(mx, v); return v; });
+        var spark = el("div", { class: "p2x-uspark", title: "Last 7 days: " + series.join(", ") });
+        series.forEach(function (v) { spark.appendChild(el("i", { style: "height:" + Math.max(4, Math.round(v / mx * 100)) + "%" })); });
+        card.appendChild(spark);
+        if (U.is_admin) {
+          var lrow = el("div", { class: "p2x-urow" });
+          var li = el("input", { type: "number", min: "0", step: "1", placeholder: "No limit", value: lim == null ? "" : String(lim), "aria-label": "Daily limit for " + nm });
+          var lb2 = el("button", { class: "p2x-btn ghost", type: "button" }, "Set limit");
+          lb2.addEventListener("click", function () {
+            lb2.disabled = true; lb2.textContent = "Saving…";
+            api("/ai/limit", { engine: eg, limit: li.value.trim() === "" ? null : Number(li.value) }).then(function () { return loadUsage(); }).then(function () { build(); }).catch(function (er) { lb2.disabled = false; lb2.textContent = "Set limit"; var m = dlg.querySelector(".p2x-msg"); if (m) { m.style.color = "#b91c1c"; m.textContent = (er && er.message) || "Could not save the limit."; } });
+          });
+          lrow.appendChild(el("label", null, "Daily limit")); lrow.appendChild(li); lrow.appendChild(lb2); card.appendChild(lrow);
+        }
+        ub.appendChild(card);
+      });
+      body.appendChild(ub);
+    }
     if (inf.is_admin) {
       var scopeSel = el("select", { "aria-label": "Apply to" });
       scopeSel.appendChild(el("option", { value: "me" }, "Just me"));
@@ -100,7 +135,8 @@
     });
     dlg.appendChild(body);
   }
-  function load() { return api("/ai/info", {}).then(function (r) { S.info = r; S.providers = r.providers || []; }); }
+  function loadUsage() { return api("/ai/usage", {}).then(function (r) { S.usage = r; }, function () { S.usage = null; }); }
+  function load() { return api("/ai/info", {}).then(function (r) { S.info = r; S.providers = r.providers || []; }).then(loadUsage); }
   function open() {
     S.scope = "me";
     if (!dlg) { dlg = el("dialog", { class: "p2x-modal" }); document.body.appendChild(dlg); }
@@ -110,6 +146,7 @@
   }
   var st = document.createElement("style");
   st.textContent = ".p2x-body input[type=password]{padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;background:#fff;color:#1f2430;min-width:0}.p2x-modal{overflow-y:auto}.p2p-eng{margin:2px 0 8px;font-size:12.5px;color:var(--ink-soft)}.p2p-eng b{color:var(--ink);font-weight:600}";
+  st.textContent += ".p2x-usage{border:1px solid #e6dfd3;border-radius:12px;padding:12px;margin:12px 0;background:#fff}.p2x-ucard{padding:10px 0;border-top:1px solid #f0ebe1}.p2x-ucard:first-of-type{border-top:0}.p2x-utop{display:flex;justify-content:space-between;gap:8px;font-size:13px;flex-wrap:wrap}.p2x-ubar{height:8px;border-radius:6px;background:#ece5d9;overflow:hidden;margin-top:6px}.p2x-ubar i{display:block;height:100%;border-radius:6px;transition:width .8s}.p2x-uspark{display:flex;align-items:flex-end;gap:3px;height:28px}.p2x-uspark i{flex:1;background:#E8943A;opacity:.7;border-radius:2px}.p2x-urow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}.p2x-urow label{font-size:12px;color:#6b7280}.p2x-urow input{width:110px;padding:8px 10px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif}";
   document.head.appendChild(st);
   window.__p2pEngine = { open: open };
 })();
