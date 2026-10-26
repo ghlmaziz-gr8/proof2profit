@@ -24,8 +24,8 @@
     }
     // Do not extrapolate a short history for long: trend only counts out to twice the observed span (at least 2 weeks).
     var heff = Math.min(horizon, Math.max(2 * span, 14));
-    var cap = horizon <= 31 ? 10 : 25;
-    var change = n > 1 ? clamp(slope * heff, -cap, cap) : 0;
+    var cap = horizon <= 31 ? 6 : 12;
+    var change = n > 1 ? clamp(slope * heff * 0.6, -cap, cap) : 0;   // trends are damped: scores tend to settle, not run away
     adj = adj || {}; var mid = clamp(Math.round(last + change - (adj.erode || 0) + (adj.lift || 0)), 0, 100);
     var u = 4 + Math.sqrt(horizon / 30) * 3 + sd; u *= n < 3 ? 1.6 : n < 5 ? 1.3 : 1;
     u = Math.round(clamp(u, 3, 25));
@@ -126,7 +126,7 @@
     el.innerHTML = '<section class="fc"><div class="fc-top"><div><p class="fc-eyebrow">Forecast</p><h3>If nothing changes, and if you act</h3>' +
       '<p class="fc-meta">' + (F.n > 1 ? "Based on " + F.n + " check-ins over " + F.span + " days" : "Based on one check-in so far") + " · today " + Math.round(F.now) + '</p></div><button type="button" class="fc-conf ' + F.conf.toLowerCase() + '" data-k="conf">' + F.conf + ' confidence<i class="fc-i">i</i></button></div>' +
       '<div class="fc-chart">' + chart(F) + "</div>" +
-      '<p class="fc-flat">⚠️ <b>What is at stake: about ' + Math.max(0, F.now - F.m6.mid) + ' points over 6 months if nothing changes.</b> ' + (F.weak.length ? "The biggest openings are <b>" + F.weak.map(esc).join("</b> and <b>") + "</b>. " : "") + "Fixing them could recover most of it (green line). " + (F.n === 1 ? "With one check-in this is a modelled scenario, not a measured trend. " : "") + (F.momentum ? "Your recent upward momentum is already softening the drop. " : "") + '</p>' + '<div class="fc-scens">' + card("Next month", F.m1, F.i1, addMonths(1), "m1") + card("Next 6 months", F.m6, F.i6, addMonths(6), "m6") + "</div>" + aspHtml +
+      '<p class="fc-flat">' + (F.now - F.m6.mid >= 1 ? '⚠️ <b>What is at stake: about ' + Math.round(F.now - F.m6.mid) + ' points over 6 months if nothing changes.</b> ' : '📈 <b>Momentum is working for you, but it will not last on its own.</b> ') + (F.weak.length ? "The biggest openings are <b>" + F.weak.map(esc).join("</b> and <b>") + "</b>. " : "") + (F.now - F.m6.mid >= 1 ? "Fixing them could recover most of it (green line). " : "Fixing them is how you keep the lead and push higher (green line). ") + (F.n === 1 ? "With one check-in this is a modelled scenario, not a measured trend. " : "") + (F.momentum ? "Your recent upward momentum is already softening the drop. " : "") + '</p>' + '<div class="fc-scens">' + card("Next month", F.m1, F.i1, addMonths(1), "m1") + card("Next 6 months", F.m6, F.i6, addMonths(6), "m6") + "</div>" + aspHtml +
       '<div class="fc-ai" id="fcAi"></div></section>';
     var root = el.querySelector(".fc");
     el.querySelectorAll("[data-k]").forEach(function (b) {
