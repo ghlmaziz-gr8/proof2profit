@@ -110,7 +110,7 @@
     ".enh-hero .biz-name{color:#fff;font-size:24px;margin:0 0 3px;line-height:1.15}",
     ".enh-hero .biz-addr{color:#BDB8AE;margin:0 0 14px}",
     ".enh-hero .best-badge{background:rgba(246,149,0,.2);color:#FFB438}",
-    ".enh-kpis{display:flex;gap:10px;flex-wrap:wrap}",
+    ".enh-kpis{display:flex;gap:10px;flex-wrap:wrap}.enh-brk{flex-basis:100%;height:0;grid-column:1/-1}",
     ".enh-kpi{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:9px 13px;min-width:104px}",
     ".enh-kpi small{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#BDB8AE}",
     ".enh-kpi b{font:600 21px 'Space Grotesk',sans-serif;color:#fff}",
@@ -466,7 +466,7 @@
       var bcon = $(".biz-contact", card); if (bcon) { bcon.className = "enh-contact"; txt.appendChild(bcon); }
       var kp = h("div", "enh-kpis");
       var revMissing = !revTxt || /^(unknown|—|n\/a)$/i.test(revTxt); var useThemes = revMissing && themes > 0;
-      var k1 = h("div", "enh-kpi", "<small>" + (useThemes ? "Themes found" : "Reviews") + "</small>"); var kb = h("b", "", useThemes ? (RM ? String(themes) : "0") : revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
+      var k1 = h("div", "enh-kpi", "<small>" + (useThemes ? "Themes found" : "Google reviews") + "</small>"); var kb = h("b", "", useThemes ? (RM ? String(themes) : "0") : revMissing ? "Not available" : (isNaN(revNum) ? revTxt : (RM ? revNum.toLocaleString() : "0")));
       if (useThemes) { kb.dataset.count = themes; kb.dataset.dec = 0; } else if (revMissing) kb.style.fontSize = "0.72em";
       if (!useThemes && !isNaN(revNum) && /^[\d,]+$/.test(revTxt)) { kb.dataset.count = revNum; kb.dataset.dec = 0; } else if (!isNaN(revNum)) { kb.textContent = revTxt; }
       k1.appendChild(kb); kp.appendChild(k1);
@@ -476,6 +476,9 @@
         var k2 = h("div", "enh-kpi", "<small>Avg score</small>"); var b2 = h("b", "", RM ? avg : "0"); b2.dataset.count = avg; b2.dataset.dec = 0; k2.appendChild(b2); kp.appendChild(k2);
         var k3 = h("div", "enh-kpi", "<small>Aspects</small>"); var b3 = h("b", "", String(bars.length)); k3.appendChild(b3); kp.appendChild(k3);
       }
+      // Our own scores first (avg score, aspects), then the channel cards together: Google rating, Google reviews, Website SEO, social platforms.
+      var brk = h("div", "enh-brk");
+      [typeof k2 !== "undefined" ? k2 : null, typeof k3 !== "undefined" ? k3 : null, useThemes ? k1 : null, brk, kg, useThemes ? null : k1].forEach(function (n) { if (n) kp.appendChild(n); });
       txt.appendChild(kp);
       if (aiRating != null || revMissing) {
         var nt = h("p", "enh-nodata", "AI rating = the average of the four aspect scores out of 5, calculated by our AI from what guests say. It is an assessment, not Google's star rating.");
@@ -491,7 +494,7 @@
           : ["Star rating: " + rating.toFixed(1) + " out of 5", "<p><b>What it means:</b> the business's public star rating from live Google data.</p><p><b>How it is calculated:</b> Google averages the stars every reviewer gave. We show it as reported.</p>"],
         reviews: useThemes ? ["Themes found: " + themes,
           "<p><b>What it means:</b> how many separate points our AI pulled out of the feedback: <b>" + nLove + "</b> things guests love plus <b>" + nSlip + "</b> things where it slips = <b>" + themes + "</b>.</p><p><b>How to use it:</b> more themes means the feedback covers more ground. Each one is listed below in 'What guests love' and 'Where it slips'.</p><p class='ex-note'>This is not a review count. It does not say how many reviews exist or were read.</p>"]
-          : ["Reviews: " + revTxt, "<p><b>What it means:</b> the total number of public reviews for this business.</p><p><b>Why it matters:</b> a high rating from many reviews is far more reliable than the same rating from a few.</p>"],
+          : ["Reviews: " + revTxt, "<p><b>What it means:</b> the total number of Google reviews for this business.</p><p><b>Why it matters:</b> a high rating from many reviews is far more reliable than the same rating from a few.</p>"],
         avg: ["Average score: " + avg + " out of 100",
           "<p><b>What it means:</b> overall how positive guests are across everything we looked at. Higher is better.</p><p><b>How it is calculated:</b> each aspect gets a 0–100 score from the feedback (" + aspList + "). The average score is the plain average of those, <b>" + avg + "</b>.</p><p><b>How to read it:</b> 85+ Strongest · 70–84 Strong · 50–69 Mixed · under 50 Needs attention. You are in: <b>" + band(avg) + "</b>.</p>"],
         aspects: ["Aspects: " + aspInfo.length,
