@@ -455,6 +455,7 @@
 <script src="progress.js"></script>
 <script src="export.js"></script>
 <script src="mybiz.js"></script>
+<script src="forecast.js"></script>
 <script>
 const splashScreen = document.getElementById('splashScreen');
 function hideSplash(){
@@ -1035,6 +1036,14 @@ function computeBestAndDiff(history){
   return out;
 }
 
+function fcOpts(extra){
+  return Object.assign({
+    ai: p => sampleCap.json(p, { modelTier: 'default', cache: false }).catch(e => { throw mapSampleError(e); }),
+    parse: t => { try{ return safeJsonParse(t); }catch(e){ return null; } },
+    save: (k, v) => storageSetJSON(k, v), load: (k, f) => storageGetJSON(k, f), isLimit: isLimitError
+  }, extra);
+}
+
 async function renderSavedList(){
   const wrap = document.getElementById('savedListWrap');
   document.getElementById('savedDetailWrap').innerHTML = '';
@@ -1087,6 +1096,7 @@ async function renderSavedDetail(slug){
       ${computeBestAndDiff(history)}
       <button id="recheckBtn" style="width:100%;margin-top:14px;">Re-check now</button>
       <div class="save-btn-row" style="margin-top:10px;"><button class="p2x-share-btn" type="button" data-export="saved" aria-haspopup="menu">⬇ Export history</button></div>
+      <div id="p2pFcMount"></div>
       <div class="list-block">
         <p class="list-title">Progress check</p>
         <div id="p2pProgressMount"></div>
@@ -1097,6 +1107,7 @@ async function renderSavedDetail(slug){
       </div>
     </div>
   `;
+  if(window.__p2pForecast) window.__p2pForecast.mount(document.getElementById('p2pFcMount'), fcOpts({ slug, name: biz.name, address: biz.address, history }));
   if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
   if(window.__p2pMy) window.__p2pMy.animate(detailWrap);
@@ -1240,6 +1251,22 @@ function renderReport(data){
       anchor.insertAdjacentHTML('beforebegin', h);
       window.__p2pProgress.animate(reportEl);
     });
+  }
+  if(window.__p2pForecast){
+    (async () => {
+      const slug = slugify(data.name);
+      const hist = await storageGetJSON('reviewlens_hist_' + slug, []);
+      if(!window.__p2pLast || window.__p2pLast.a !== data) return;
+      const asp = data.aspects || [];
+      const avgS = asp.length ? Math.round(asp.reduce((a, x) => a + Number(x.score || 0), 0) / asp.length) : null;
+      const lastH = hist[hist.length - 1];
+      const cur = (lastH && Date.now() - lastH.ts < 10 * 60 * 1000) ? null : { ts: Date.now(), rating: data.rating == null ? null : data.rating, avgScore: avgS, aspects: asp, likes: data.likes || [], dislikes: data.dislikes || [] };
+      const holder = document.createElement('div'); holder.id = 'p2pFcReport';
+      const anchor = reportEl.querySelector('.save-btn-row');
+      if(!anchor || !anchor.parentNode) return;
+      anchor.parentNode.insertBefore(holder, anchor);
+      window.__p2pForecast.mount(holder, fcOpts({ slug, name: data.name, address: data.address, history: hist, current: cur }));
+    })();
   }
   lastAnalyzedBusiness = { name: data.name, address: data.address };
   document.getElementById('competitorBtn').addEventListener('click', findCompetitors);
