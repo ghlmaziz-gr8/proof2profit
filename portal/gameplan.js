@@ -165,6 +165,9 @@
       var now = snap.overall, tg = c.results.score_target;
       h += '<div class="gp-sec"><h4>Expected results</h4><div class="gp-row"><div class="gp-big"><span>Today</span><b>' + (now == null ? "–" : now) + '</b></div><div class="gp-arrow">→</div><label class="gp-big"><span>In 90 days</span><input type="number" min="0" max="100" data-p="results.score_target" data-n="1" value="' + (tg == null ? "" : tg) + '"' + dis + ">" + "</label>" + (now != null && tg != null ? '<div class="gp-sm">AI rating ' + (now / 20).toFixed(1) + " → " + (tg / 20).toFixed(1) + " out of 5</div>" : "") + '</div><textarea data-p="results.note" rows="2"' + dis + ">" + esc(c.results.note) + "</textarea></div>";
       h += '<div class="gp-sec"><h4>Investment</h4>' + (inv.items.length ? '<div class="gp-inv">' + inv.items.map(function (i) { return "<div><span>" + esc(i.name) + "</span><b>" + money(i.price, i.unit) + "</b></div>"; }).join("") + '<div class="gp-tot"><span>' + (inv.total_once ? "One-time " + money(inv.total_once) : "") + (inv.total_once && inv.total_monthly ? " + " : "") + (inv.total_monthly ? money(inv.total_monthly, "per month") : "") + '</span><b>90-day total ' + money(inv.total_90) + "</b></div></div>" : '<p class="gp-sm">Pick a service on each fix to build the investment.</p>') + "</div>";
+      if (p.id && p.status === "draft") h += '<div class="gp-sec"><h4>Send to the owner</h4><p class="gp-sm">They get an email with a private link to a branded page. No sign-in needed. Sending freezes this version (you can always make a new one).</p><input type="email" id="gpTo" maxlength="120" placeholder="owner@business.com" value="' + esc(p.recipient_email || "") + '"><textarea id="gpNote" rows="2" maxlength="600" placeholder="Optional personal note"></textarea><div class="gp-acts"><button type="button" class="soc-go" data-a="send">Save and send</button></div></div>';
+      else if (!p.id) h += '<p class="gp-sm">Save the draft first to enable sending.</p>';
+      if (p.status === "sent") h += '<div class="gp-sec"><h4>Delivery</h4><p class="gp-sm">Sent' + (p.recipient_email ? " to <b>" + esc(p.recipient_email) + "</b>" : "") + " " + fmtD(p.sent_at) + " · opened " + (p.open_count || 0) + " time" + (p.open_count === 1 ? "" : "s") + ' · link is <b>' + (p.share_enabled ? "on" : "off") + '</b></p><div class="gp-acts"><button type="button" class="p2x-btn ghost" data-a="copy">Copy link</button><a class="p2x-btn ghost" data-a="prev" href="#" target="_blank" rel="noopener">Preview</a><button type="button" class="p2x-btn ghost" data-a="tog">' + (p.share_enabled ? "Turn link off" : "Turn link on") + '</button></div><input type="email" id="gpTo" maxlength="120" placeholder="Resend to…" value="' + esc(p.recipient_email || "") + '"><div class="gp-acts"><button type="button" class="p2x-btn ghost" data-a="send">Resend email</button></div></div>';
       h += '<p class="gp-err" id="gpM"></p><div class="gp-acts">' + (ro() ? '<button type="button" class="p2x-btn" data-a="ver">Create a new version</button>' : '<button type="button" class="soc-go" data-a="save">Save draft</button><button type="button" class="p2x-btn ghost" data-a="regen">Redraft with AI</button>') + (p.id ? '<button type="button" class="p2x-btn ghost" data-a="del">Delete</button>' : "") + "</div>";
       root.innerHTML = h; state.msg = ""; bindEd();
     }
@@ -193,6 +196,27 @@
         rg.disabled = true; rg.textContent = "Drafting…";
         gather(opts).then(function (g) { if (!g) throw { message: "Analyze this business first." }; return opts.ai(draftPrompt(g, state.svc, opts.name, opts.address)).then(function (raw) { var nc = normalize(raw, state.svc, g); if (!nc.priorities.length) throw { message: "The AI did not return a usable plan. Try again." }; p.content = nc; p.snapshot = snapshotOf(g); p.engine = raw && raw._engine || null; editor(); }); })
           .catch(function (e) { rg.disabled = false; rg.textContent = "Redraft with AI"; flash((e && e.message) || "Could not redraft right now.", false); });
+      });
+      function base() { return location.origin; }
+      var sd = root.querySelector('[data-a="send"]'); if (sd) sd.addEventListener("click", function () {
+        var to = (root.querySelector("#gpTo").value || "").trim(), nt = root.querySelector("#gpNote");
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { flash("Enter a valid email address.", false); return; }
+        if (sd.getAttribute("data-armed") !== "1") { sd.setAttribute("data-armed", "1"); sd.textContent = "Click again to send to " + to; return; }
+        sd.disabled = true; sd.textContent = "Sending…";
+        var pre = p.status === "draft" ? (c.investment = Object.assign({ note: "" }, invest(c, state.svc)), rpc("save_plan", { p_id: p.id, p_slug: opts.slug, p_name: opts.name, p_address: opts.address || "", p_title: p.title, p_content: c, p_snapshot: p.snapshot || {} })) : Promise.resolve();
+        pre.then(function () { return rpc("share_plan", { p_id: p.id, p_to: to, p_note: nt ? nt.value : "", p_base: base() }); })
+          .then(function () { return rpc("get_plan", { p_id: p.id }); })
+          .then(function (np) { state.cur = np; state.msg = ""; editor(); flash("Sent to " + to + ".", true); },
+            function (e) { sd.disabled = false; sd.removeAttribute("data-armed"); sd.textContent = "Save and send"; flash((e && e.message) || "Could not send.", false); });
+      });
+      var cp = root.querySelector('[data-a="copy"]'), pv = root.querySelector('[data-a="prev"]');
+      if (cp || pv) rpc("plan_link", { p_id: p.id, p_base: base() }).then(function (r) {
+        if (!r || !r.link) return;
+        if (pv) pv.setAttribute("href", r.link + "&preview=1");
+        if (cp) cp.addEventListener("click", function () { var done = function () { cp.textContent = "Copied"; }; try { navigator.clipboard.writeText(r.link).then(done, function () { flash(r.link, true); }); } catch (e) { flash(r.link, true); } });
+      }, function () {});
+      var tg = root.querySelector('[data-a="tog"]'); if (tg) tg.addEventListener("click", function () {
+        rpc("set_plan_sharing", { p_id: p.id, p_enabled: !p.share_enabled }).then(function () { p.share_enabled = !p.share_enabled; editor(); }, function (e) { flash((e && e.message) || "Could not change.", false); });
       });
       var vr = root.querySelector('[data-a="ver"]'); if (vr) vr.addEventListener("click", function () { rpc("new_plan_version", { p_id: p.id }).then(function (r) { open(r.id); }, function (e) { flash((e && e.message) || "Could not create a new version.", false); }); });
       var dl = root.querySelector('[data-a="del"]'); if (dl) dl.addEventListener("click", function () {

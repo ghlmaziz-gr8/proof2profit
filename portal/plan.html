@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>Your Game Plan · Proof to Profit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F3EEE6;--card:#fff;--ink:#14161A;--soft:#6B665D;--line:#E6DFD3;--amber:#F59E0B;--green:#1D9E75;--red:#C24A34}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+.hero{background:#14161A;color:#fff;border-radius:22px;padding:26px 24px}
+.brand{font:700 12px 'Space Grotesk',sans-serif;letter-spacing:.18em;color:#F5B041}
+h1{font:700 30px/1.15 'Space Grotesk',sans-serif;margin:10px 0 6px;text-wrap:balance}
+.sub{color:#B9B4AA;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 22px;margin-top:16px}
+h2{font:700 13px 'Space Grotesk',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin:0 0 12px}
+.score{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.score b{font:700 54px/1 'Space Grotesk',sans-serif}.score span{color:var(--soft)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}.chip{text-transform:capitalize;background:#F6F1E8;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:500}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:14px}
+.two h3{margin:0 0 6px;font-size:14px}.g{color:var(--green)}.r{color:var(--red)}
+ul{margin:0;padding-left:18px}li{margin:4px 0}
+.pri{display:flex;gap:14px;padding:14px 0;border-top:1px solid #F0EBE1}.pri:first-of-type{border-top:0}
+.n{flex:0 0 30px;height:30px;border-radius:50%;background:#FFF0D9;color:#C26A00;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pri b{display:block}.tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}.tag{font-size:12px;background:#F3EFE8;border-radius:99px;padding:2px 9px;color:var(--soft)}
+.months{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.m{border:1px solid var(--line);border-radius:14px;padding:14px}.m h3{margin:0 0 2px;font:700 13px 'Space Grotesk',sans-serif;color:#C26A00}.m h4{margin:0 0 8px;font-size:16px}
+.target{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.target b{font:700 38px 'Space Grotesk',sans-serif}.arrow{font-size:26px;color:var(--soft)}
+.inv>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #F0EBE1}.inv .tot{border:0;font-weight:700;font-size:17px}
+.foot{margin-top:22px;font-size:12.5px;color:var(--soft);line-height:1.5}
+.msg{text-align:center;margin-top:20vh;color:var(--soft)}
+@media(max-width:640px){.two,.months{grid-template-columns:1fr}h1{font-size:25px}.hero,.card{padding:20px 18px}}
+@media print{body{background:#fff}.hero{border:1px solid #000}}
+</style></head><body>
+<div class="wrap" id="app"><p class="msg">Loading your plan…</p></div>
+<script src="config.js"></script>
+<script>
+(function(){
+  function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+  function money(n,u){n=Number(n||0);var s="$"+n.toLocaleString("en-US",{maximumFractionDigits:2});return u==="per month"?s+"/mo":s}
+  var app=document.getElementById("app");
+  function msg(t){app.innerHTML='<p class="msg">'+esc(t)+'</p>'}
+  var q=new URLSearchParams(location.search),t=q.get("t")||"",cfg=window.P2P_CONFIG||{};
+  if(!/^[a-f0-9]{48}$/.test(t)){msg("This link isn't valid. Ask the person who sent it for a new one.");return}
+  fetch(cfg.SUPABASE_URL+"/rest/v1/rpc/public_plan",{method:"POST",headers:{"Content-Type":"application/json",apikey:cfg.SUPABASE_ANON_KEY,Authorization:"Bearer "+cfg.SUPABASE_ANON_KEY},body:JSON.stringify({p_token:t,p_count:q.get("preview")!=="1"})})
+   .then(function(r){if(!r.ok)throw 0;return r.json()})
+   .then(function(p){if(!p){msg("This plan isn't available any more. Ask the person who sent it for an updated link.");return}render(p)})
+   .catch(function(){msg("We couldn't load this plan right now. Please try again in a moment.")});
+  function render(p){
+    var c=p.content||{},s=p.snapshot||{},st=c.standing||{},pri=c.priorities||[],rm=c.roadmap||[],res=c.results||{},inv=c.investment||{},items=inv.items||[];
+    var byId={};items.forEach(function(i){byId[i.id]=i});
+    document.title=(p.title||"Game Plan")+" · Proof to Profit";
+    var h='<div class="hero"><div class="brand">PROOF TO PROFIT</div><h1>'+esc(p.title||"Game Plan for "+p.business_name)+'</h1><div class="sub">90-day growth plan for '+esc(p.business_name)+(p.address?" · "+esc(p.address):"")+'<br>Prepared by '+esc(p.prepared_by)+(p.org?" at "+esc(p.org):"")+(p.sent_at?" · "+new Date(p.sent_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}):"")+'</div></div>';
+    h+='<div class="card"><h2>Where you stand today</h2>';
+    if(s.overall!=null){h+='<div class="score"><b>'+esc(s.overall)+'</b><span>/ 100 overall business health</span></div>';
+      var ch=[];if(s.rating!=null)ch.push("Google rating "+s.rating+"/5");if(s.reviews)ch.push(s.reviews+" Google reviews");if(s.seo!=null)ch.push("Website SEO "+s.seo);(s.social||[]).forEach(function(x){ch.push(x.platform+" "+x.score)});
+      if(ch.length)h+='<div class="chips">'+ch.map(function(x){return '<span class="chip">'+esc(x)+'</span>'}).join("")+'</div>'}
+    if(st.summary)h+='<p>'+esc(st.summary)+'</p>';
+    if((st.strengths||[]).length||(st.gaps||[]).length)h+='<div class="two"><div><h3 class="g">What is working</h3><ul>'+(st.strengths||[]).map(function(x){return '<li>'+esc(x)+'</li>'}).join("")+'</ul></div><div><h3 class="r">Gaps to close</h3><ul>'+(st.gaps||[]).map(function(x){return '<li>'+esc(x)+'</li>'}).join("")+'</ul></div></div>';
+    h+='</div>';
+    if(pri.length){h+='<div class="card"><h2>Priority fixes</h2>'+pri.map(function(x,i){var sv=byId[x.service_id];return '<div class="pri"><div class="n">'+(i+1)+'</div><div><b>'+esc(x.title)+'</b><span style="color:var(--soft)">'+esc(x.why)+'</span><div class="tags"><span class="tag">Impact: '+esc(x.impact)+'</span><span class="tag">Effort: '+esc(x.effort)+'</span>'+(sv?'<span class="tag">'+esc(sv.name)+' · '+money(sv.price,sv.unit)+'</span>':"")+'</div></div></div>'}).join("")+'</div>'}
+    if(rm.length){h+='<div class="card"><h2>Your 90-day roadmap</h2><div class="months">'+rm.map(function(m){return '<div class="m"><h3>MONTH '+esc(m.month)+'</h3><h4>'+esc(m.title)+'</h4><ul>'+(m.actions||[]).map(function(a){return '<li>'+esc(a)+'</li>'}).join("")+'</ul></div>'}).join("")+'</div></div>'}
+    if(res.score_target!=null||res.note){h+='<div class="card"><h2>Expected results</h2>';
+      if(s.overall!=null&&res.score_target!=null)h+='<div class="target"><div><small>Today</small><br><b>'+esc(s.overall)+'</b></div><div class="arrow">→</div><div><small>In 90 days</small><br><b>'+esc(res.score_target)+'</b></div><div style="color:var(--soft);font-size:14px">AI rating '+(s.overall/20).toFixed(1)+' → '+(res.score_target/20).toFixed(1)+' out of 5</div></div>';
+      if(res.note)h+='<p>'+esc(res.note)+'</p>';h+='</div>'}
+    if(items.length){h+='<div class="card"><h2>Services and pricing</h2><div class="inv">'+items.map(function(i){return '<div><span>'+esc(i.name)+'</span><b>'+money(i.price,i.unit)+'</b></div>'}).join("")+'<div class="tot"><span>'+(inv.total_once?"One-time "+money(inv.total_once):"")+(inv.total_once&&inv.total_monthly?" + ":"")+(inv.total_monthly?money(inv.total_monthly,"per month"):"")+'</span><span>90-day total '+money(inv.total_90)+'</span></div></div></div>'}
+    h+='<p class="foot">Scores and projections are AI estimates based on public review, website and social patterns. They are a starting point, not a guarantee or an audit. Prepared with Proof to Profit.</p>';
+    app.innerHTML=h;
+  }
+})();
+</script></body></html>
