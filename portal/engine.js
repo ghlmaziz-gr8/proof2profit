@@ -148,5 +148,33 @@
   st.textContent = ".p2x-body input[type=password]{padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif;background:#fff;color:#1f2430;min-width:0}.p2x-modal{overflow-y:auto}.p2p-eng{margin:2px 0 8px;font-size:12.5px;color:var(--ink-soft)}.p2p-eng b{color:var(--ink);font-weight:600}";
   st.textContent += ".p2x-usage{border:1px solid #e6dfd3;border-radius:12px;padding:12px;margin:12px 0;background:#fff}.p2x-ucard{padding:10px 0;border-top:1px solid #f0ebe1}.p2x-ucard:first-of-type{border-top:0}.p2x-utop{display:flex;justify-content:space-between;gap:8px;font-size:13px;flex-wrap:wrap}.p2x-ubar{height:8px;border-radius:6px;background:#ece5d9;overflow:hidden;margin-top:6px}.p2x-ubar i{display:block;height:100%;border-radius:6px;transition:width .8s}.p2x-uspark{display:flex;align-items:flex-end;gap:3px;height:28px}.p2x-uspark i{flex:1;background:#E8943A;opacity:.7;border-radius:2px}.p2x-urow{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}.p2x-urow label{font-size:12px;color:#6b7280}.p2x-urow input{width:110px;padding:8px 10px;border:1px solid #d1d5db;border-radius:10px;font:14px system-ui,sans-serif}";
   document.head.appendChild(st);
-  window.__p2pEngine = { open: open };
+  // Small always-visible usage pill on every page.
+  var pill = null, pst = document.createElement("style");
+  pst.textContent = ".p2x-pill{position:fixed;left:12px;bottom:12px;z-index:900;display:none;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid #e6dfd3;background:rgba(255,255,255,.95);color:#4b5563;font:600 11.5px system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.08)}.p2x-pill i{width:8px;height:8px;border-radius:50%;background:#1D9E75;display:inline-block}.p2x-pill:hover{background:#fff}@media print{.p2x-pill{display:none!important}}";
+  document.head.appendChild(pst);
+  function refreshPill() {
+    var ss = window.__p2p && window.__p2p.session && window.__p2p.session();
+    if (!ss) { if (pill) pill.style.display = "none"; return; }
+    api("/ai/usage", {}).then(function (U) {
+      if (!U || !U.active) { if (pill) pill.style.display = "none"; return; }
+      var r = (U.today || []).filter(function (x) { return x.engine === U.active; })[0] || { calls: 0, errors: 0 };
+      var lim = null; (U.limits || []).forEach(function (l) { if (l.engine === U.active) lim = l.limit; });
+      var pct = lim ? r.calls / lim : 0, col = pct >= 1 ? "#C24A34" : pct >= .7 ? "#F69500" : "#1D9E75";
+      if (!pill) {
+        pill = el("button", { type: "button", class: "p2x-pill" });
+        pill.addEventListener("click", function () { open(); });
+        document.body.appendChild(pill);
+      }
+      pill.textContent = "";
+      var dot = el("i"); dot.style.background = col; pill.appendChild(dot);
+      pill.appendChild(document.createTextNode("AI " + r.calls + (lim != null ? "/" + lim : "") + " today"));
+      pill.title = U.active.replace(":", " · ") + " · " + r.calls + (lim != null ? " of " + lim + " daily calls used" : " calls today, no limit set") + (r.errors ? " · " + r.errors + " failed" : "") + ". Click for details.";
+      pill.style.display = "inline-flex";
+    }, function () { if (pill) pill.style.display = "none"; });
+  }
+  setTimeout(refreshPill, 2500);
+  setInterval(refreshPill, 60000);
+  window.addEventListener("focus", refreshPill);
+  window.addEventListener("p2p-ai-used", function () { setTimeout(refreshPill, 1500); });
+  window.__p2pEngine = { open: open, refreshUsage: refreshPill };
 })();
