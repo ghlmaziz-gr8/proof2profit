@@ -86,7 +86,7 @@
   }, { passive: true });
 
   // ---------- sticky section bar for the single-business report ----------
-  var SECTIONS = [["Overview", ".enh-hero"], ["Progress", ".p2p-banner"], ["Breakdown", ".enh-grid"], ["Forecast", ".fc"], ["Website SEO", ".seo"], ["Social", ".soc"], ["Competitors", "#competitorCard"]];
+  var SECTIONS = [["Overview", ".enh-hero"], ["Progress", ".p2p-banner"], ["Breakdown", ".enh-grid"], ["Forecast", ".fc"], ["Website SEO", ".seo"], ["Social", ".soc"], ["Game Plan", ".gp"], ["Competitors", "#competitorCard"]];
   var spy = null, barSig = "";
   function buildBar() {
     var rep = $("#report"); if (!rep || getComputedStyle(rep).display === "none") return;

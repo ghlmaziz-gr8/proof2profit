@@ -467,6 +467,7 @@
 <script src="forecast.js"></script>
 <script src="seo.js"></script>
 <script src="social.js"></script>
+<script src="gameplan.js"></script>
 <script src="engine.js"></script>
 <script src="polish.js"></script>
 <script src="overall.js"></script>
@@ -1117,6 +1118,7 @@ async function renderSavedDetail(slug){
       <div id="p2pFcMount"></div>
       <div id="p2pSeoMount"></div>
       <div id="p2pSocMount"></div>
+      <div id="p2pGpMount"></div>
       <div class="list-block">
         <p class="list-title">Progress check</p>
         <div id="p2pProgressMount"></div>
@@ -1130,6 +1132,7 @@ async function renderSavedDetail(slug){
   if(window.__p2pForecast) window.__p2pForecast.mount(document.getElementById('p2pFcMount'), fcOpts({ slug, name: biz.name, address: biz.address, history }));
   if(window.__p2pSeo) window.__p2pSeo.mount(document.getElementById('p2pSeoMount'), fcOpts({ slug, name: biz.name, address: biz.address }));
   if(window.__p2pSocial) window.__p2pSocial.mount(document.getElementById('p2pSocMount'), fcOpts({ slug, name: biz.name, address: biz.address }));
+  if(window.__p2pGamePlan) window.__p2pGamePlan.mount(document.getElementById('p2pGpMount'), fcOpts({ slug, name: biz.name, address: biz.address, history }));
   if(window.__p2pProgress) window.__p2pProgress.mountSaved(history, document.getElementById('p2pProgressMount'), document.getElementById('p2pHistoryMount'));
   document.getElementById('backToList').addEventListener('click', renderSavedList);
   if(window.__p2pMy) window.__p2pMy.animate(detailWrap);
@@ -1372,6 +1375,11 @@ function renderReport(data){
         const so = document.createElement('div'); so.id = 'p2pSocReport';
         anchor.parentNode.insertBefore(so, anchor);
         window.__p2pSocial.mount(so, fcOpts({ slug, name: data.name, address: data.address }));
+      }
+      if(window.__p2pGamePlan){
+        const gp = document.createElement('div'); gp.id = 'p2pGpReport';
+        anchor.parentNode.insertBefore(gp, anchor);
+        window.__p2pGamePlan.mount(gp, fcOpts({ slug, name: data.name, address: data.address, history: hist }));
       }
     })();
   }

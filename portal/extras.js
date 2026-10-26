@@ -149,6 +149,9 @@
         body.appendChild(gb);
       }
       if (me.role === "super" || me.role === "admin" || me.role === "agency_admin") {
+        var cb = el("button", { class: "p2x-btn ghost", type: "button" }, "Service catalog");
+        cb.addEventListener("click", function () { dlg.close(); if (window.__p2pGamePlan) window.__p2pGamePlan.openCatalog(); });
+        body.appendChild(cb);
         var hb = el("button", { class: "p2x-btn ghost", type: "button" }, "Behavior & heat map");
         hb.addEventListener("click", function () { dlg.close(); if (window.__p2pInsights) window.__p2pInsights.open("behavior"); });
         body.appendChild(hb);
