@@ -125,8 +125,27 @@ begin
         body := body || '<p style="margin:0 0 10px;font-size:14px;line-height:20px;color:#3B3A37"><b>' || public.p2p_esc(coalesce(left(asp ->> 'title', 100), '')) || '</b><br>' || public.p2p_esc(coalesce(left(asp ->> 'angle', 300), '')) || '</p>';
       end loop;
     end if;
+    if jsonb_typeof(a -> 'extras' -> 'progress') = 'object' then
+      body := body || public.p2p_h('Progress since ' || coalesce(left(a -> 'extras' -> 'progress' ->> 'since', 30), 'the last assessment'))
+        || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#14161A"><b>' || public.p2p_esc(coalesce(left(a -> 'extras' -> 'progress' ->> 'head', 80), '')) || '.</b> ' || public.p2p_esc(coalesce(left(a -> 'extras' -> 'progress' ->> 'summary', 300), '')) || '</p>';
+      if jsonb_typeof(a -> 'extras' -> 'progress' -> 'rows') = 'array' then
+        for asp in select value from jsonb_array_elements(a -> 'extras' -> 'progress' -> 'rows') limit 12 loop
+          body := body || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:3px 0;font-size:13px;color:#3B3A37">' || public.p2p_esc(coalesce(left(asp ->> 'name', 40), '')) || '</td><td align="right" style="padding:3px 0;font-size:13px;font-weight:bold;color:#3B3A37">' || coalesce(asp ->> 'prev', '–') || ' &rarr; ' || coalesce(asp ->> 'cur', '–') || '</td></tr></table>';
+        end loop;
+      end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'progress' -> 'new_concerns', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#B4442F">New concerns</div>' || public.p2p_li(a -> 'extras' -> 'progress' -> 'new_concerns', '#D9534F'); end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'progress' -> 'gone_concerns', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#0B6B54">No longer coming up</div>' || public.p2p_li(a -> 'extras' -> 'progress' -> 'gone_concerns', '#1F9D74'); end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'progress' -> 'new_strengths', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#0B6B54">New strengths</div>' || public.p2p_li(a -> 'extras' -> 'progress' -> 'new_strengths', '#1F9D74'); end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'progress' -> 'lost_strengths', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:12px 0 2px;color:#B4442F">Strengths that faded</div>' || public.p2p_li(a -> 'extras' -> 'progress' -> 'lost_strengths', '#D9534F'); end if;
+    end if;
     if jsonb_typeof(a -> 'extras' -> 'forecast') = 'object' then
       body := body || public.p2p_h('Forecast');
+      if jsonb_typeof(a -> 'extras' -> 'forecast' -> 'nums') = 'object' then
+        body := body || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px"><tr><td width="50%" valign="top" style="padding-right:6px"><div style="background:#14161A;border-radius:12px;padding:12px;color:#fff"><div style="font-size:11px;letter-spacing:.08em;color:#F5B041;font-weight:bold">NEXT MONTH</div><div style="font-size:12px;margin-top:6px;color:#F3EEE6">If nothing changes</div><div style="font-size:24px;font-weight:bold;color:'
+          || public.p2p_score_color(coalesce(nullif(a -> 'extras' -> 'forecast' -> 'nums' ->> 'm1', '')::numeric, 0)) || '">' || coalesce(left(a -> 'extras' -> 'forecast' -> 'nums' ->> 'm1', 4), '–') || '</div><div style="font-size:12px;margin-top:4px;color:#7FE0BD">If you fix the top issues: <b>' || coalesce(left(a -> 'extras' -> 'forecast' -> 'nums' ->> 'i1', 4), '–') || '</b></div></div></td>'
+          || '<td width="50%" valign="top" style="padding-left:6px"><div style="background:#14161A;border-radius:12px;padding:12px;color:#fff"><div style="font-size:11px;letter-spacing:.08em;color:#F5B041;font-weight:bold">NEXT 6 MONTHS</div><div style="font-size:12px;margin-top:6px;color:#F3EEE6">If nothing changes</div><div style="font-size:24px;font-weight:bold;color:'
+          || public.p2p_score_color(coalesce(nullif(a -> 'extras' -> 'forecast' -> 'nums' ->> 'm6', '')::numeric, 0)) || '">' || coalesce(left(a -> 'extras' -> 'forecast' -> 'nums' ->> 'm6', 4), '–') || '</div><div style="font-size:12px;margin-top:4px;color:#7FE0BD">If you fix the top issues: <b>' || coalesce(left(a -> 'extras' -> 'forecast' -> 'nums' ->> 'i6', 4), '–') || '</b></div></div></td></tr></table>';
+      end if;
       if coalesce(a -> 'extras' -> 'forecast' ->> 'headline', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#14161A"><b>' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'headline', 200)) || '</b></p>'; end if;
       if coalesce(a -> 'extras' -> 'forecast' ->> 'next_month', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b>Next month:</b> ' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'next_month', 400)) || '</p>'; end if;
       if coalesce(a -> 'extras' -> 'forecast' ->> 'next_6_months', '') <> '' then body := body || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b>Next 6 months:</b> ' || public.p2p_esc(left(a -> 'extras' -> 'forecast' ->> 'next_6_months', 400)) || '</p>'; end if;
@@ -135,13 +154,28 @@ begin
     if jsonb_typeof(a -> 'extras' -> 'seo') = 'object' then
       sc := nullif(a -> 'extras' -> 'seo' ->> 'score', '')::numeric;
       body := body || public.p2p_h('Website SEO check') || '<p style="margin:0 0 8px;font-size:14px;line-height:21px;color:#3B3A37"><b style="font-size:20px;color:' || public.p2p_score_color(coalesce(sc, 0)) || '">' || coalesce(sc::text, '–') || '</b> / 100 &middot; ' || public.p2p_esc(coalesce(left(a -> 'extras' -> 'seo' ->> 'url', 120), '')) || '</p>';
-      if coalesce(a -> 'extras' -> 'seo' ->> 'headline', '') <> '' then body := body || '<p style="margin:0 0 6px;font-size:14px;line-height:21px;color:#3B3A37">' || public.p2p_esc(left(a -> 'extras' -> 'seo' ->> 'headline', 200)) || '</p>'; end if;
-      body := body || public.p2p_li(a -> 'extras' -> 'seo' -> 'quick_wins', '#E8943A');
+      if jsonb_typeof(a -> 'extras' -> 'seo' -> 'cats') = 'array' then
+        for asp in select value from jsonb_array_elements(a -> 'extras' -> 'seo' -> 'cats') limit 10 loop
+          sa := nullif(asp ->> 'score', '')::numeric; continue when sa is null;
+          body := body || '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px"><tr><td style="font-size:13px;color:#3B3A37">' || public.p2p_esc(coalesce(left(asp ->> 'name', 40), '')) || '</td><td align="right" style="font-size:13px;font-weight:bold;color:' || public.p2p_score_color(sa) || '">' || round(sa) || '</td></tr></table>' || public.p2p_bar(sa, public.p2p_score_color(sa));
+        end loop;
+      end if;
+      if coalesce(a -> 'extras' -> 'seo' ->> 'headline', '') <> '' then body := body || '<p style="margin:10px 0 6px;font-size:14px;line-height:21px;color:#14161A"><b>' || public.p2p_esc(left(a -> 'extras' -> 'seo' ->> 'headline', 200)) || '</b></p>'; end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'seo' -> 'quick_wins', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:8px 0 2px">Quick wins (this week)</div>' || public.p2p_li(a -> 'extras' -> 'seo' -> 'quick_wins', '#E8943A'); end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'seo' -> 'this_month', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:8px 0 2px">This month</div>' || public.p2p_li(a -> 'extras' -> 'seo' -> 'this_month', '#E8943A'); end if;
+      if jsonb_array_length(coalesce(a -> 'extras' -> 'seo' -> 'local_tips', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:13px;font-weight:bold;margin:8px 0 2px">Local search tips</div>' || public.p2p_li(a -> 'extras' -> 'seo' -> 'local_tips', '#E8943A'); end if;
     end if;
     if jsonb_typeof(a -> 'extras' -> 'social') = 'array' and jsonb_array_length(a -> 'extras' -> 'social') > 0 then
       body := body || public.p2p_h('Social media');
       for asp in select value from jsonb_array_elements(a -> 'extras' -> 'social') limit 4 loop
-        body := body || '<p style="margin:0 0 10px;font-size:14px;line-height:20px;color:#3B3A37"><b>' || public.p2p_esc(coalesce(left(asp ->> 'platform', 20), '')) || ' @' || public.p2p_esc(coalesce(left(asp ->> 'handle', 60), '')) || '</b> &middot; <b style="color:' || public.p2p_score_color(coalesce(nullif(asp ->> 'score', '')::numeric, 0)) || '">' || coalesce(nullif(asp ->> 'score', ''), '–') || '/100</b><br>' || public.p2p_esc(coalesce(left(asp ->> 'headline', 250), '')) || '</p>';
+        body := body || '<p style="margin:0 0 4px;font-size:14px;line-height:20px;color:#3B3A37"><b>' || public.p2p_esc(coalesce(left(asp ->> 'platform', 20), '')) || ' @' || public.p2p_esc(coalesce(left(asp ->> 'handle', 60), '')) || '</b> &middot; <b style="color:' || public.p2p_score_color(coalesce(nullif(asp ->> 'score', '')::numeric, 0)) || '">' || coalesce(nullif(asp ->> 'score', ''), '–') || '/100</b>'
+          || case when nullif(asp ->> 'followers', '') is not null then ' &middot; ' || to_char(nullif(asp ->> 'followers', '')::numeric, 'FM999,999,999') || ' followers' else '' end
+          || case when nullif(asp ->> 'growth', '') is not null then ' (' || case when (asp ->> 'growth')::numeric >= 0 then '+' else '' end || to_char((asp ->> 'growth')::numeric, 'FM999,999,999') || ' since last check)' else '' end
+          || '</p><p style="margin:0 0 6px;font-size:13.5px;line-height:20px;color:#3B3A37">' || public.p2p_esc(coalesce(left(asp ->> 'headline', 250), '')) || '</p>';
+        if jsonb_array_length(coalesce(asp -> 'strengths', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:12.5px;font-weight:bold;margin:4px 0 2px;color:#0B6B54">What is working</div>' || public.p2p_li(asp -> 'strengths', '#1F9D74'); end if;
+        if jsonb_array_length(coalesce(asp -> 'gaps', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:12.5px;font-weight:bold;margin:4px 0 2px;color:#B4442F">Gaps to close</div>' || public.p2p_li(asp -> 'gaps', '#D9534F'); end if;
+        if jsonb_array_length(coalesce(asp -> 'ideas', '[]'::jsonb)) > 0 then body := body || '<div style="font-size:12.5px;font-weight:bold;margin:4px 0 2px">Post ideas</div>' || public.p2p_li(asp -> 'ideas', '#E8943A'); end if;
+        body := body || '<div style="height:10px"></div>';
       end loop;
     end if;
     if coalesce(a ->> 'engine', '') <> '' then

@@ -59,13 +59,28 @@
   // forecast / SEO / social summaries saved for this business (single analysis only)
   function extrasFor(last) {
     if (last.kind !== "single" || !last.a || typeof window.slugify !== "function") return Promise.resolve(null);
-    var sg = window.slugify(last.a.name);
-    return Promise.all([kv("reviewlens_fc_" + sg), kv("reviewlens_seo_" + sg), kv("reviewlens_social_" + sg)]).then(function (r) {
-      var fc = r[0] && r[0].v === 2 && r[0].d, seo = r[1], soc = r[2], x = {};
-      if (fc) x.forecast = { headline: t(fc.headline, 200), next_month: t(fc.next_month && fc.next_month.outlook, 400), next_6_months: t(fc.next_6_months && fc.next_6_months.outlook, 400), actions: (fc.actions || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(fc._engine, 80) };
-      if (seo && seo.score != null) x.seo = { score: Number(seo.score) || 0, url: t(seo.url, 120), headline: t(seo.ai && seo.ai.headline, 200), quick_wins: ((seo.ai && seo.ai.quick_wins) || []).slice(0, 4).map(function (v) { return t(v, 250); }), engine: t(seo.ai && seo.ai._engine, 80) };
+    var sg = window.slugify(last.a.name), A = last.a;
+    return Promise.all([kv("reviewlens_fc_" + sg), kv("reviewlens_seo_" + sg), kv("reviewlens_social_" + sg), kv("reviewlens_hist_" + sg)]).then(function (r) {
+      var fc = r[0] && r[0].v === 2 && r[0].d, seo = r[1], soc = r[2], hist = (r[3] || []).filter(function (h) { return h && h.ts && (!A._viewing || !A._ts || h.ts < A._ts); }), x = {};
+      function arr(v, n, m) { return (v || []).slice(0, n).map(function (q) { return t(q, m || 250); }); }
+      // forecast numbers (both paths) from the same model the app shows
+      var F = null; try { var P = window.__p2pProgress; var cur = { ts: A._ts || Date.now(), rating: A.rating, avgScore: P ? P.avgOf(A.aspects) : null, aspects: A.aspects || [], likes: A.likes || [], dislikes: A.dislikes || [] }; F = window.__p2pForecast && window.__p2pForecast.build(hist, cur); } catch (e) { F = null; }
+      if (F || fc) x.forecast = {
+        headline: t(fc && fc.headline, 200), next_month: t(fc && fc.next_month && fc.next_month.outlook, 400), next_6_months: t(fc && fc.next_6_months && fc.next_6_months.outlook, 400), actions: arr(fc && fc.actions, 4), engine: t(fc && fc._engine, 80),
+        nums: F ? { now: Math.round(F.now), m1: F.m1.mid, m6: F.m6.mid, i1: F.i1.mid, i6: F.i6.mid, weak: (F.weak || []).slice(0, 2).map(function (v) { return t(v, 40); }), conf: t(F.conf, 10) } : null
+      };
+      if (seo && seo.score != null) x.seo = { score: Number(seo.score) || 0, url: t(seo.url, 120), headline: t(seo.ai && seo.ai.headline, 200), quick_wins: arr(seo.ai && seo.ai.quick_wins, 4), this_month: arr(seo.ai && seo.ai.this_month, 4), local_tips: arr(seo.ai && seo.ai.local_tips, 3), engine: t(seo.ai && seo.ai._engine, 80),
+        cats: Object.keys(seo.cats || {}).slice(0, 10).map(function (k) { return { name: t(k, 40), score: Number(seo.cats[k]) }; }).filter(function (c) { return !isNaN(c.score); }) };
       var ps = (soc && soc.profiles || []).filter(function (p) { return p && p.report; }).slice(0, 4);
-      if (ps.length) x.social = ps.map(function (p) { return { platform: t(p.platform, 20), handle: t(p.handle, 60), score: Number(p.report.score) || 0, headline: t(p.report.headline, 250), engine: t(p.engine, 80) }; });
+      if (ps.length) x.social = ps.map(function (p) { var R = p.report, sn = (p.snaps || []).filter(function (q) { return q.followers != null; }), g = sn.length > 1 ? sn[sn.length - 1].followers - sn[sn.length - 2].followers : null;
+        return { platform: t(p.platform, 20), handle: t(p.handle, 60), score: Number(R.score) || 0, headline: t(R.headline, 250), followers: R.followers == null ? null : Number(R.followers), growth: g, strengths: arr(R.strengths, 4, 200), gaps: arr(R.gaps, 4, 200), ideas: arr(R.content_ideas, 4, 200), engine: t(p.engine, 80) }; });
+      // what changed since the previous saved assessment
+      try {
+        var P2 = window.__p2pProgress, prev = hist[hist.length - 1];
+        if (P2 && prev) { var c = P2.compare(prev, { ts: Date.now(), rating: A.rating, avgScore: P2.avgOf(A.aspects), aspects: A.aspects || [], likes: A.likes || [], dislikes: A.dislikes || [] });
+          x.progress = { head: t(c.head, 80), summary: t(c.summary, 300), since: t(new Date(prev.ts).toLocaleDateString("default", { month: "long", day: "numeric", year: "numeric" }), 30), verdict: t(c.verdict, 10),
+            rows: (c.rows || []).slice(0, 12).map(function (q) { return { name: t(q.name, 40), prev: q.prev == null ? null : q.prev, cur: q.cur == null ? null : q.cur }; }), new_concerns: arr(c.newConcerns, 4, 200), gone_concerns: arr(c.goneConcerns, 4, 200), new_strengths: arr(c.newStrengths, 4, 200), lost_strengths: arr(c.lostStrengths, 4, 200) }; }
+      } catch (e) { }
       return Object.keys(x).length ? x : null;
     }, function () { return null; });
   }
