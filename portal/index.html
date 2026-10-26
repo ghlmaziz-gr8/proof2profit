@@ -695,9 +695,13 @@ async function fetchBusinessData(query){
     throw new Error('API_ERROR: AI features are not available in this view.');
   }
   const isShortLink = /maps\.app\.goo\.gl/.test(query);
-  if(isShortLink){
+  // Read the rating and review count straight from Google Maps (public page) before the AI step.
+  const gmPromise = (window.__p2p && window.__p2p.api) ? window.__p2p.api('/gmaps', { query }).then(r => (r && r.result) || { found: false }).catch(() => ({ found: false })) : Promise.resolve({ found: false });
+  const gm = isShortLink ? await gmPromise : null;
+  if(isShortLink && !(gm && gm.found && gm.name)){
     throw new Error('NEEDS_INFO: ' + query);
   }
+  if(gm && gm.name) query = gm.name;
 
   const monthName = new Date().toLocaleString('default', { month: 'long' });
   const todayLabel = new Date().toLocaleDateString('default', { month: 'long', day: 'numeric' });
@@ -707,8 +711,10 @@ async function fetchBusinessData(query){
     [`${query} reviews`, `${query} menu hours`]
   );
 
-  const groundingBlock = groundingText
-    ? `Below are real, current web search results about this business. Base your analysis ONLY on what these results actually say — do not add outside claims beyond what's reasonably implied by them.\n\n${groundingText}\n\n`
+  const gmFacts = await gmPromise;
+  const gmLine = gmFacts && gmFacts.found ? `Read live from the Google Maps page for this business: ${gmFacts.rating != null ? 'star rating ' + gmFacts.rating + ' out of 5' : ''}${gmFacts.rating != null && gmFacts.review_count != null ? ', ' : ''}${gmFacts.review_count != null ? gmFacts.review_count + ' Google reviews' : ''}. Treat these as the true figures and judge the review themes against them.\n\n` : '';
+  const groundingBlock = (groundingText || gmLine)
+    ? `Below are real, current web search results about this business. Base your analysis ONLY on what these results actually say — do not add outside claims beyond what's reasonably implied by them.\n\n${gmLine}${groundingText}\n\n`
     : `You have no live web access here — answer from your own general knowledge of this business if you recognize it. Be conservative: only state specifics (ratings, exact review counts, named dishes or features) you are genuinely confident about; where unsure, use reasonable, clearly-general placeholders rather than invented precision.\n\n`;
 
   const prompt = `Respond with ONLY a single JSON object, no markdown fences, no preamble, no commentary before or after it. This instruction matters more than being thorough — a valid, complete JSON object is required. Critical formatting rule: never place a literal double-quote character inside any string value — paraphrase instead of quoting directly.
@@ -759,13 +765,18 @@ Include exactly 2 campaign ideas. Adjust the aspect names if a different set fit
   if(parsed.needs_more_info){
     throw new Error('NEEDS_INFO: ' + query);
   }
-  parsed._grounded = !!groundingText;
+  parsed._grounded = !!groundingText || !!(gmFacts && gmFacts.found);
   parsed._engine = window.__p2pLastEngine || null;
   // A star rating and review total are only shown when they came from real search results.
   // Without them the AI is just recalling from memory, and a remembered number can be wrong.
   const rt = Number(parsed.rating), rc = String(parsed.review_count == null ? '' : parsed.review_count).trim();
   if(!parsed._grounded || !(rt > 0 && rt <= 5)) parsed.rating = null; else parsed.rating = Math.round(rt * 10) / 10;
   if(!parsed._grounded || !/\d/.test(rc)) parsed.review_count = null;
+  if(gmFacts && gmFacts.found){
+    if(gmFacts.rating != null) parsed.rating = gmFacts.rating;
+    if(gmFacts.review_count != null) parsed.review_count = String(gmFacts.review_count);
+    parsed._gmaps = true;
+  }
   // Contact details and review recency: same rule, only from real search results, and shape-checked.
   const web = String(parsed.website || '').trim(), ph = String(parsed.phone || '').trim(), lr = String(parsed.last_review || '').trim();
   const webOk = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}([\/?#]\S*)?$/i.test(web);
@@ -1217,7 +1228,7 @@ function renderReport(data){
     <div class="card">
       <p class="biz-name">${data.name || 'Unknown business'}${data._grounded ? ' <span class="best-badge" style="vertical-align:middle;">Live search</span>' : ''}</p>
       <p class="biz-addr">${data.address || ''}</p>
-      ${data._viewing ? `<p class="p2p-eng">📁 Saved assessment from <b>${escHtml(new Date(data._ts || Date.now()).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }))}</b>${data._engine ? ` · by <b>${escHtml(data._engine)}</b>` : ''}</p>` : (data._engine ? `<p class="p2p-eng">✨ Assessed by <b>${escHtml(data._engine)}</b></p>` : '')}
+      ${data._viewing ? `<p class="p2p-eng">📁 Saved assessment from <b>${escHtml(new Date(data._ts || Date.now()).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' }))}</b>${data._engine ? ` · by <b>${escHtml(data._engine)}</b>` : ''}</p>` : (data._engine ? `<p class="p2p-eng">✨ Assessed by <b>${escHtml(data._engine)}</b></p>` : '')}${data._gmaps ? `<p class="p2p-eng">📍 Rating and review count read live from Google Maps</p>` : ''}
       ${contactHtml(data)}
 
       <div class="stat-grid">

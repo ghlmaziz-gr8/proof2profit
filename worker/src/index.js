@@ -417,6 +417,58 @@ async function socialAudit(input) {
 }
 
 
+
+// ---------- Google Maps reader (best effort, public pages only) ----------
+// Fixed Google hosts only. Reads the star rating and review count that the public Maps / search page shows, if Google serves it to us.
+function decodeEsc(s) { return String(s).replace(/\\u003d/g, "=").replace(/\\u0026/g, "&").replace(/\\u003c/g, "<").replace(/\\u003e/g, ">").replace(/\\"/g, '"').replace(/&quot;/g, '"').replace(/&amp;/g, "&"); }
+function parseMapsFacts(raw) {
+  const html = decodeEsc(raw), out = { found: false };
+  const ld = html.match(/"aggregateRating"\s*:\s*\{[^}]*?"ratingValue"\s*:\s*"?([\d.]+)"?[^}]*?"(?:reviewCount|ratingCount)"\s*:\s*"?([\d,]+)"?/i) || html.match(/"aggregateRating"\s*:\s*\{[^}]*?"(?:reviewCount|ratingCount)"\s*:\s*"?([\d,]+)"?[^}]*?"ratingValue"\s*:\s*"?([\d.]+)"?/i);
+  let rating = null, count = null;
+  if (ld) { const a = Number(ld[1]), b = Number(String(ld[2]).replace(/,/g, "")); if (a >= 1 && a <= 5) { rating = a; count = b; } else if (b >= 1 && b <= 5) { rating = b; count = Number(String(ld[1]).replace(/,/g, "")); } }
+  if (rating == null) { const m = html.match(/\b([1-5](?:\.\d)?)\s*(?:stars?\b|★)/i); if (m) rating = Number(m[1]); }
+  if (count == null) { const m = html.match(/([\d,]{1,9})\s+(?:Google\s+)?reviews?\b/i) || html.match(/\(([\d,]{1,9})\)\s*(?:·|·)?\s*(?:[A-Za-z ]{3,30})?\s*$/m); if (m) { const n = Number(String(m[1]).replace(/,/g, "")); if (Number.isFinite(n) && n > 0) count = n; } }
+  const title = (metaContent(html, "og:title") || (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "");
+  const name = stripTags(title).replace(/\s*[-–·|]\s*Google\s+(Maps|Search).*$/i, "").replace(/\s*-\s*Google.*$/i, "").trim().slice(0, 100);
+  if (rating != null && rating >= 1 && rating <= 5) { out.rating = Math.round(rating * 10) / 10; out.found = true; }
+  if (count != null && Number.isFinite(count) && count > 0) { out.review_count = count; out.found = true; }
+  if (name && !/^(google|before you continue|sign in)/i.test(name)) out.name = name;
+  return out;
+}
+function mapsStart(query) {
+  const q = String(query || "").trim();
+  if (!q || q.length > 300) throw { code: "bad_url" };
+  if (/^https?:\/\//i.test(q)) {
+    let u; try { u = new URL(q); } catch { throw { code: "bad_url" }; }
+    const h = u.hostname.toLowerCase().replace(/^www\./, "");
+    const ok = h === "maps.app.goo.gl" || h === "goo.gl" || h === "g.co" || /^google\.[a-z.]{2,6}$/.test(h) && (u.pathname.startsWith("/maps") || h.startsWith("maps."));
+    if (!ok) throw { code: "bad_url" };
+    return u.toString();
+  }
+  return "https://www.google.com/maps/search/" + encodeURIComponent(q) + "?hl=en&gl=us";
+}
+async function gmapsRead(query) {
+  const start = mapsStart(query), tried = [];
+  const isText = !/^https?:\/\//i.test(String(query || "").trim());
+  const urls = [start]; if (isText) urls.push("https://www.google.com/search?hl=en&gl=us&q=" + encodeURIComponent(String(query).trim() + " reviews"));
+  let best = { found: false };
+  for (const url of urls) {
+    try {
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 9000);
+      const res = await fetch(url, { redirect: "follow", signal: ctl.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9", Accept: "text/html,application/xhtml+xml", Cookie: "CONSENT=YES+1; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg" } });
+      const body = await readCapped(res, 2500000); clearTimeout(timer);
+      const fh = (() => { try { return new URL(res.url).hostname; } catch { return ""; } })();
+      tried.push({ status: res.status, host: fh });
+      if (!/(^|\.)google\.[a-z.]{2,6}$/.test(fh)) continue;
+      if (/consent\.google|\/sorry\//i.test(res.url)) continue;
+      const f = parseMapsFacts(body.text);
+      if (f.found && (f.rating != null || f.review_count != null)) { best = { ...f, source: fh }; if (f.rating != null && f.review_count != null) break; }
+    } catch { tried.push({ status: 0 }); }
+  }
+  best.fetchedAt = Date.now(); best.tried = tried.length;
+  return best;
+}
+
 // ---------- Recent posts + formula score (public pages only) ----------
 function ageDaysFromText(t) {
   const m = String(t || "").toLowerCase().match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago/);
@@ -531,7 +583,7 @@ Rules: use ONLY the evidence above. Owner-stated numbers may be used but are unv
   return { platform: t.platform, handle: t.handle, url: t.url, report: r, direct: direct && direct.found ? { followers: direct.followers, following: direct.following ?? null, posts: direct.posts ?? null, hearts: direct.hearts ?? null } : null, sources, engine: eng.label + " · " + eng.model, ts: Date.now() };
 }
 
-export { seoAudit, socialAudit, socialTarget, readSocial, socialAssess, parseYoutubePosts, socialFormula };
+export { gmapsRead, parseMapsFacts, seoAudit, socialAudit, socialTarget, readSocial, socialAssess, parseYoutubePosts, socialFormula };
 
 export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(drain(env)); },
@@ -664,6 +716,13 @@ export default {
         return json({ ok: true }, 200, h);
       }
       return json({ error: "not_found" }, 404, h);
+    }
+
+    if (path === "/gmaps") {
+      const u = await bump(env, token, "gmaps", parseInt(env.DAILY_GMAPS_LIMIT || "80", 10));
+      if (!u.auth) return json({ error: "not_signed_in" }, 401, h);
+      if (u.error || !u.allowed) return json({ result: { found: false } }, 200, h);
+      try { return json({ result: await gmapsRead(body.query) }, 200, h); } catch (e) { return json({ result: { found: false } }, 200, h); }
     }
 
     if (path === "/social-assess") {
